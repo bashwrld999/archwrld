@@ -109,25 +109,15 @@ loadConfig() {
   fi
 }
 #------------------------------------------------------------------------------------------------------#
-init() {
-  init_log_trace "$LOG_TRACE"
-  init_log_file "$LOG_FILE" "$ARCHWRLD_LOG_FILE"
-  #loadkeys "$KEYS"
+function print_step() {
+  STEP="$1"
+  echo ""
+  echo -e "${blue}#---> ${STEP} ${nc}"
 }
 
-init_log_trace() {
-  local ENABLE="$1"
-  if [ "$ENABLE" == "true" ]; then
-    set -o xtrace
-  fi
-}
-
-init_log_file() {
-  local ENABLE="$1"
-  local FILE="$2"
-  if [ "$ENABLE" == "true" ]; then
-    exec &> >(tee -a "$FILE")
-  fi
+function execute_step() {
+  local STEP="$1"
+  eval "$STEP"
 }
 #------------------------------------------------------------------------------------------------------#
 sanitize_variable() {
@@ -357,11 +347,32 @@ check_variables_size() {
 }
 #------------------------------------------------------------------------------------------------------#
 installArch() {
-  warning
-  facts
-  checks
-  prepare
-  partition
+  execute_step "warning"
+  execute_step "init"
+  execute_step "facts"
+  execute_step "checks"
+  execute_step "prepare"
+  execute_step "partition"
+  execute_step "install"
+  execute_step "configuration"
+  execute_step "users"
+  if [ -n "$DISPLAY_DRIVER" ]; then
+    execute_step "display_driver"
+  fi
+  execute_step "kernels"
+  execute_step "network"
+  if [ "$VIRTUALBOX" == "true" ]; then
+    execute_step "virtualbox"
+  fi
+  if [ "$VMWARE" == "true" ]; then
+    execute_step "vmware"
+  fi
+  execute_step "bootloader"
+  execute_step "mkinitcpio_configuration"
+  execute_step "mkinitcpio"
+  if [ -n "$CUSTOM_SHELL" ]; then
+    execute_step "custom_shell"
+  fi
 }
 #------------------------------------------------------------------------------------------------------#
 warning() {
@@ -391,7 +402,31 @@ warning() {
   esac
 }
 
+init() {
+  print_step "Init"
+  init_log_trace "$LOG_TRACE"
+  init_log_file "$LOG_FILE" "$ARCHWRLD_LOG_FILE"
+  #loadkeys "$KEYS"
+}
+
+init_log_trace() {
+  local ENABLE="$1"
+  if [ "$ENABLE" == "true" ]; then
+    set -o xtrace
+  fi
+}
+
+init_log_file() {
+  local ENABLE="$1"
+  local FILE="$2"
+  if [ "$ENABLE" == "true" ]; then
+    exec &> >(tee -a "$FILE")
+  fi
+}
+
 facts() {
+  print_step "Facts"
+
   facts_commons
 
   if echo "$DEVICE" | grep -q "^/dev/sd[a-z]"; then
@@ -502,6 +537,8 @@ facts_commons() {
 }
 #------------------------------------------------------------------------------------------------------#
 checks() {
+  print_step "Checks"
+
   check_facts
 }
 
@@ -516,6 +553,8 @@ check_facts() {
 }
 #------------------------------------------------------------------------------------------------------#
 prepare() {
+  print_step "Prepare"
+
   configure_reflector
   configure_time
   prepare_partition
@@ -630,6 +669,8 @@ configure_network() {
 }
 #------------------------------------------------------------------------------------------------------#
 partition() {
+  print_step "Partition"
+
   partprobe -s "$DEVICE"
 
   # setup
@@ -908,6 +949,986 @@ partition_mount() {
     done
   fi
 }
+#------------------------------------------------------------------------------------------------------#
+function install() {
+  print_step "Install"
+
+  local COUNTRIES=()
+
+  pacman-key --init
+  pacman-key --populate
+
+  if [ -n "$PACMAN_MIRROR" ]; then
+    echo "Server = $PACMAN_MIRROR" >/etc/pacman.d/mirrorlist
+  fi
+  if [ "$REFLECTOR" == "true" ]; then
+    for COUNTRY in "${REFLECTOR_COUNTRIES[@]}"; do
+      local COUNTRIES+=(--country "$COUNTRY")
+    done
+    pacman -Sy --noconfirm reflector
+    reflector "${COUNTRIES[@]}" --latest 25 --age 24 --protocol https --completion-percent 100 --sort rate --save /etc/pacman.d/mirrorlist
+  fi
+
+  sed -i 's/#Color/Color/' /etc/pacman.conf
+  if [ "$PACMAN_PARALLEL_DOWNLOADS" == "true" ]; then
+    sed -i 's/#ParallelDownloads/ParallelDownloads/' /etc/pacman.conf
+  else
+    sed -i 's/#ParallelDownloads\(.*\)/#ParallelDownloads\1\nDisableDownloadTimeout/' /etc/pacman.conf
+  fi
+
+  local PACKAGES=()
+  if [ "$LVM" == "true" ]; then
+    local PACKAGES+=("lvm2")
+  fi
+  if [ "$FILE_SYSTEM_TYPE" == "btrfs" ]; then
+    local PACKAGES+=("btrfs-progs")
+  fi
+  if [ "$FILE_SYSTEM_TYPE" == "xfs" ]; then
+    local PACKAGES+=("xfsprogs")
+  fi
+  if [ "$FILE_SYSTEM_TYPE" == "f2fs" ]; then
+    local PACKAGES+=("f2fs-tools")
+  fi
+  if [ "$FILE_SYSTEM_TYPE" == "reiserfs" ]; then
+    local PACKAGES+=("reiserfsprogs")
+  fi
+
+  pacstrap "${MNT_DIR}" base base-devel linux linux-firmware "${PACKAGES[@]}"
+
+  if [ "$PACMAN_PARALLEL_DOWNLOADS" == "true" ]; then
+    sed -i 's/#ParallelDownloads/ParallelDownloads/' "${MNT_DIR}"/etc/pacman.conf
+  else
+    sed -i 's/#ParallelDownloads\(.*\)/#ParallelDownloads\1\nDisableDownloadTimeout/' "${MNT_DIR}"/etc/pacman.conf
+  fi
+
+  if [ "$REFLECTOR" == "true" ]; then
+    pacman_install "reflector"
+    cat <<EOT >"${MNT_DIR}/etc/xdg/reflector/reflector.conf"
+${COUNTRIES[@]}
+--latest 25
+--age 24
+--protocol https
+--completion-percent 100
+--sort rate
+--save /etc/pacman.d/mirrorlist
+EOT
+    arch-chroot "${MNT_DIR}" reflector "${COUNTRIES[@]}" --latest 25 --age 24 --protocol https --completion-percent 100 --sort rate --save /etc/pacman.d/mirrorlist
+    arch-chroot "${MNT_DIR}" systemctl enable reflector.timer
+  fi
+
+  if [ "$PACKAGES_MULTILIB" == "true" ]; then
+    sed -z -i 's/#\[multilib\]\n#/[multilib]\n/' "${MNT_DIR}"/etc/pacman.conf
+  fi
+}
+
+function pacman_install() {
+  local ERROR="true"
+  local PACKAGES=()
+  set +e
+  IFS=' ' read -ra PACKAGES <<<"$1"
+  for VARIABLE in {1..5}; do
+    local COMMAND="pacman -Syu --noconfirm --needed ${PACKAGES[*]}"
+    if execute_sudo "$COMMAND"; then
+      local ERROR="false"
+      break
+    else
+      sleep 10
+    fi
+  done
+  set -e
+  if [ "$ERROR" == "true" ]; then
+    exit 1
+  fi
+}
+
+function execute_sudo() {
+  local COMMAND="$1"
+  if [ "$SYSTEM_INSTALLATION" == "true" ]; then
+    arch-chroot "${MNT_DIR}" bash -c "$COMMAND"
+  else
+    sudo bash -c "$COMMAND"
+  fi
+}
+#------------------------------------------------------------------------------------------------------#
+function configuration() {
+  print_step "Configuration"
+
+  if [ "$GPT_AUTOMOUNT" != "true" ]; then
+    genfstab -U "${MNT_DIR}" >>"${MNT_DIR}/etc/fstab"
+
+    cat <<EOT >>"${MNT_DIR}/etc/fstab"
+# efivars
+efivarfs /sys/firmware/efi/efivars efivarfs ro,nosuid,nodev,noexec 0 0
+
+EOT
+
+    if [ -n "$SWAP_SIZE" ]; then
+      cat <<EOT >>"${MNT_DIR}/etc/fstab"
+# swap
+$SWAPFILE none swap defaults 0 0
+
+EOT
+    fi
+  fi
+
+  if [ "$DEVICE_TRIM" == "true" ]; then
+    if [ "$GPT_AUTOMOUNT" != "true" ]; then
+      if [ "$FILE_SYSTEM_TYPE" == "f2fs" ]; then
+        sed -i 's/relatime/noatime,nodiscard/' "${MNT_DIR}"/etc/fstab
+      else
+        sed -i 's/relatime/noatime/' "${MNT_DIR}"/etc/fstab
+      fi
+    fi
+    arch-chroot "${MNT_DIR}" systemctl enable fstrim.timer
+  fi
+
+  arch-chroot "${MNT_DIR}" ln -s -f "$TIMEZONE" /etc/localtime
+  arch-chroot "${MNT_DIR}" hwclock --systohc
+  for LOCALE in "${LOCALES[@]}"; do
+    sed -i "s/#$LOCALE/$LOCALE/" /etc/locale.gen
+    sed -i "s/#$LOCALE/$LOCALE/" "${MNT_DIR}"/etc/locale.gen
+  done
+  for VARIABLE in "${LOCALE_CONF[@]}"; do
+    #localectl set-locale "$VARIABLE"
+    echo -e "$VARIABLE" >>"${MNT_DIR}"/etc/locale.conf
+  done
+  locale-gen
+  arch-chroot "${MNT_DIR}" locale-gen
+  echo -e "$KEYMAP\n$FONT\n$FONT_MAP" >"${MNT_DIR}"/etc/vconsole.conf
+  echo "$HOSTNAME" >"${MNT_DIR}"/etc/hostname
+
+  local OPTIONS=""
+  if [ -n "$KEYLAYOUT" ]; then
+    local OPTIONS="$OPTIONS"$'\n'"    Option \"XkbLayout\" \"$KEYLAYOUT\""
+  fi
+  if [ -n "$KEYMODEL" ]; then
+    local OPTIONS="$OPTIONS"$'\n'"    Option \"XkbModel\" \"$KEYMODEL\""
+  fi
+  if [ -n "$KEYVARIANT" ]; then
+    local OPTIONS="$OPTIONS"$'\n'"    Option \"XkbVariant\" \"$KEYVARIANT\""
+  fi
+  if [ -n "$KEYOPTIONS" ]; then
+    local OPTIONS="$OPTIONS"$'\n'"    Option \"XkbOptions\" \"$KEYOPTIONS\""
+  fi
+
+  arch-chroot "${MNT_DIR}" mkdir -p "/etc/X11/xorg.conf.d/"
+  cat <<EOT >"${MNT_DIR}/etc/X11/xorg.conf.d/00-keyboard.conf"
+# Written by systemd-localed(8), read by systemd-localed and Xorg. It's
+# probably wise not to edit this file manually. Use localectl(1) to
+# instruct systemd-localed to update it.
+Section "InputClass"
+    Identifier "system-keyboard"
+    MatchIsKeyboard "on"
+    $OPTIONS
+EndSection
+EOT
+
+  if [ -n "$SWAP_SIZE" ]; then
+    echo "vm.swappiness=10" >"${MNT_DIR}"/etc/sysctl.d/99-sysctl.conf
+  fi
+
+  printf "%s\n%s" "$ROOT_PASSWORD" "$ROOT_PASSWORD" | arch-chroot "${MNT_DIR}" passwd
+}
+#------------------------------------------------------------------------------------------------------#
+function users() {
+  print_step "Users"
+
+  local USERS_GROUPS="wheel,storage,optical"
+  create_user "$USER_NAME" "$USER_PASSWORD" "$USERS_GROUPS"
+
+  for U in "${ADDITIONAL_USERS[@]}"; do
+    local S=()
+    IFS='=' read -ra S <<<"$U"
+    local USER="${S[0]}"
+    local PASSWORD="${S[1]}"
+    create_user "$USER" "$PASSWORD" "$USERS_GROUPS"
+  done
+
+  arch-chroot "${MNT_DIR}" sed -i 's/# %wheel ALL=(ALL:ALL) ALL/%wheel ALL=(ALL:ALL) ALL/' /etc/sudoers
+
+  pacman_install "xdg-user-dirs"
+
+  if [ "$SYSTEMD_HOMED" == "true" ]; then
+    arch-chroot "${MNT_DIR}" systemctl enable systemd-homed.service
+
+    cat <<EOT >"${MNT_DIR}/etc/pam.d/nss-auth"
+#%PAM-1.0
+
+auth     sufficient pam_unix.so try_first_pass nullok
+auth     sufficient pam_systemd_home.so
+auth     required   pam_deny.so
+
+account  sufficient pam_unix.so
+account  sufficient pam_systemd_home.so
+account  required   pam_deny.so
+
+password sufficient pam_unix.so try_first_pass nullok sha512 shadow
+password sufficient pam_systemd_home.so
+password required   pam_deny.so
+EOT
+
+    cat <<EOT >"${MNT_DIR}/etc/pam.d/system-auth"
+#%PAM-1.0
+
+auth      substack   nss-auth
+auth      optional   pam_permit.so
+auth      required   pam_env.so
+
+account   substack   nss-auth
+account   optional   pam_permit.so
+account   required   pam_time.so
+
+password  substack   nss-auth
+password  optional   pam_permit.so
+
+session   required  pam_limits.so
+session   optional  pam_systemd_home.so
+session   required  pam_unix.so
+session   optional  pam_permit.so
+EOT
+  fi
+}
+
+function create_user() {
+  local USER=$1
+  local PASSWORD=$2
+  local USERS_GROUPS=$3
+  if [ "$SYSTEMD_HOMED" == "true" ]; then
+    create_user_homectl "$USER" "$PASSWORD" "$USERS_GROUPS"
+  else
+    create_user_useradd "$USER" "$PASSWORD" "$USERS_GROUPS"
+  fi
+}
+
+function create_user_homectl() {
+  local USER=$1
+  local PASSWORD=$2
+  local USER_GROUPS=$3
+  local STORAGE="--storage=directory"
+  local IMAGE_PATH="--image-path=${MNT_DIR}/home/$USER"
+  local FS_TYPE=""
+  local CIFS_DOMAIN=""
+  local CIFS_USERNAME=""
+  local CIFS_SERVICE=""
+  local TZ=${TIMEZONE//\/usr\/share\/zoneinfo\//}
+  local L=${LOCALE_CONF[0]//LANG=/}
+
+  if [ "$SYSTEMD_HOMED_STORAGE" != "auto" ]; then
+    local STORAGE="--storage=$SYSTEMD_HOMED_STORAGE"
+  fi
+  if [ "$SYSTEMD_HOMED_STORAGE" == "luks" ] && [ "$SYSTEMD_HOMED_STORAGE_LUKS_TYPE" != "auto" ]; then
+    local FS_TYPE="--fs-type=$SYSTEMD_HOMED_STORAGE_LUKS_TYPE"
+  fi
+  if [ "$SYSTEMD_HOMED_STORAGE" == "luks" ]; then
+    local IMAGE_PATH="--image-path=${MNT_DIR}/home/$USER.home"
+  fi
+  if [ "$SYSTEMD_HOMED_STORAGE" == "cifs" ]; then
+    local CIFS_DOMAIN="--cifs-domain=${SYSTEMD_HOMED_CIFS_DOMAIN["domain"]}"
+    local CIFS_USERNAME="--cifs-user-name=$USER"
+    local CIFS_SERVICE="--cifs-service=${SYSTEMD_HOMED_CIFS_SERVICE["service"]}"
+  fi
+  if [ "$SYSTEMD_HOMED_STORAGE" == "luks" ] && [ "$SYSTEMD_HOMED_STORAGE_LUKS_TYPE" == "auto" ]; then
+    pacman_install "btrfs-progs"
+  fi
+
+  systemctl start systemd-homed.service
+  sleep 10 # #151 avoid Operation on home <USER> failed: Transport endpoint is not conected.
+  # shellcheck disable=SC2086
+  homectl create "$USER" --enforce-password-policy=no --real-name="$USER" --timezone="$TZ" --language="$L" $STORAGE $IMAGE_PATH $FS_TYPE $CIFS_DOMAIN $CIFS_USERNAME $CIFS_SERVICE -G "$USER_GROUPS"
+  sleep 10 # #151 avoid Operation on home <USER> failed: Transport endpoint is not conected.
+  cp -a "/var/lib/systemd/home/." "${MNT_DIR}/var/lib/systemd/home/"
+}
+
+function create_user_useradd() {
+  local USER=$1
+  local PASSWORD=$2
+  local USER_GROUPS=$3
+  arch-chroot "${MNT_DIR}" useradd -m -G "$USER_GROUPS" -c "$USER" -s /bin/bash "$USER"
+  printf "%s\n%s" "$USER_PASSWORD" "$USER_PASSWORD" | arch-chroot "${MNT_DIR}" passwd "$USER"
+}
+
+function user_add_groups() {
+  local USER="$1"
+  local USER_GROUPS="$2"
+  if [ "$SYSTEMD_HOMED" == "true" ]; then
+    homectl update "$USER" -G "$USER_GROUPS"
+  else
+    arch-chroot "${MNT_DIR}" usermod -a -G "$USER_GROUPS" "$USER"
+  fi
+}
+
+function user_add_groups_lightdm() {
+  arch-chroot "${MNT_DIR}" groupadd -r "autologin"
+  user_add_groups "$USER_NAME" "autologin"
+
+  for U in "${ADDITIONAL_USERS[@]}"; do
+    local S=()
+    IFS='=' read -ra S <<<"$U"
+    local USER=${S[0]}
+    user_add_groups "$USER" "autologin"
+  done
+}
+#------------------------------------------------------------------------------------------------------#
+function display_driver() {
+  print_step "display_driver()"
+
+  local PACKAGES_DRIVER_PACMAN="true"
+  local PACKAGES_DRIVER=""
+  local PACKAGES_DRIVER_MULTILIB=""
+  local PACKAGES_DDX=""
+  local PACKAGES_VULKAN=""
+  local PACKAGES_VULKAN_MULTILIB=""
+  local PACKAGES_HARDWARE_ACCELERATION=""
+  local PACKAGES_HARDWARE_ACCELERATION_MULTILIB=""
+  case "$DISPLAY_DRIVER" in
+  "intel")
+    local PACKAGES_DRIVER_MULTILIB="lib32-mesa"
+    ;;
+  "amdgpu")
+    local PACKAGES_DRIVER_MULTILIB="lib32-mesa"
+    ;;
+  "ati")
+    local PACKAGES_DRIVER_MULTILIB="lib32-mesa"
+    ;;
+  "nvidia")
+    local PACKAGES_DRIVER="nvidia"
+    local PACKAGES_DRIVER_MULTILIB="lib32-nvidia-utils"
+    ;;
+  "nvidia-lts")
+    local PACKAGES_DRIVER="nvidia-lts"
+    local PACKAGES_DRIVER_MULTILIB="lib32-nvidia-utils"
+    ;;
+  "nvidia-dkms")
+    local PACKAGES_DRIVER="nvidia-dkms"
+    local PACKAGES_DRIVER_MULTILIB="lib32-nvidia-utils"
+    ;;
+  "nvidia-470xx-dkms")
+    local PACKAGES_DRIVER_PACMAN="false"
+    local PACKAGES_DRIVER="nvidia-470xx-dkms"
+    local PACKAGES_DRIVER_MULTILIB="lib32-nvidia-utils"
+    ;;
+  "nvidia-390xx-dkms")
+    local PACKAGES_DRIVER_PACMAN="false"
+    local PACKAGES_DRIVER="nvidia-390xx-dkms"
+    local PACKAGES_DRIVER_MULTILIB="lib32-nvidia-utils"
+    ;;
+  "nvidia-340xx-dkms")
+    local PACKAGES_DRIVER_PACMAN="false"
+    local PACKAGES_DRIVER="nvidia-340xx-dkms"
+    local PACKAGES_DRIVER_MULTILIB="lib32-nvidia-utils"
+    ;;
+  "nouveau")
+    local PACKAGES_DRIVER_MULTILIB="lib32-mesa"
+    ;;
+  esac
+  if [ "$DISPLAY_DRIVER_DDX" == "true" ]; then
+    case "$DISPLAY_DRIVER" in
+    "intel")
+      local PACKAGES_DDX="xf86-video-intel"
+      ;;
+    "amdgpu")
+      local PACKAGES_DDX="xf86-video-amdgpu"
+      ;;
+    "ati")
+      local PACKAGES_DDX="xf86-video-ati"
+      ;;
+    "nouveau")
+      local PACKAGES_DDX="xf86-video-nouveau"
+      ;;
+    esac
+  fi
+  if [ "$VULKAN" == "true" ]; then
+    case "$DISPLAY_DRIVER" in
+    "intel")
+      local PACKAGES_VULKAN="vulkan-intel vulkan-icd-loader"
+      local PACKAGES_VULKAN_MULTILIB="lib32-vulkan-intel lib32-vulkan-icd-loader"
+      ;;
+    "amdgpu")
+      local PACKAGES_VULKAN="vulkan-radeon vulkan-icd-loader"
+      local PACKAGES_VULKAN_MULTILIB="lib32-vulkan-radeon lib32-vulkan-icd-loader"
+      ;;
+    "ati")
+      local PACKAGES_VULKAN="vulkan-radeon vulkan-icd-loader"
+      local PACKAGES_VULKAN_MULTILIB="lib32-vulkan-radeon lib32-vulkan-icd-loader"
+      ;;
+    "nvidia")
+      local PACKAGES_VULKAN="nvidia-utils vulkan-icd-loader"
+      local PACKAGES_VULKAN_MULTILIB="lib32-nvidia-utils lib32-vulkan-icd-loader"
+      ;;
+    "nvidia-lts")
+      local PACKAGES_VULKAN="nvidia-utils vulkan-icd-loader"
+      local PACKAGES_VULKAN_MULTILIB="lib32-nvidia-utils lib32-vulkan-icd-loader"
+      ;;
+    "nvidia-dkms")
+      local PACKAGES_VULKAN="nvidia-utils vulkan-icd-loader"
+      local PACKAGES_VULKAN_MULTILIB="lib32-nvidia-utils lib32-vulkan-icd-loader"
+      ;;
+    "nouveau")
+      local PACKAGES_VULKAN=""
+      local PACKAGES_VULKAN_MULTILIB=""
+      ;;
+    esac
+  fi
+  if [ "$DISPLAY_DRIVER_HARDWARE_VIDEO_ACCELERATION" == "true" ]; then
+    case "$DISPLAY_DRIVER" in
+    "intel")
+      if [ -n "$DISPLAY_DRIVER_HARDWARE_VIDEO_ACCELERATION_INTEL" ]; then
+        local PACKAGES_HARDWARE_ACCELERATION="$DISPLAY_DRIVER_HARDWARE_VIDEO_ACCELERATION_INTEL"
+        local PACKAGES_HARDWARE_ACCELERATION_MULTILIB=""
+      fi
+      ;;
+    "amdgpu")
+      local PACKAGES_HARDWARE_ACCELERATION="libva-mesa-driver"
+      local PACKAGES_HARDWARE_ACCELERATION_MULTILIB="lib32-libva-mesa-driver"
+      ;;
+    "ati")
+      local PACKAGES_HARDWARE_ACCELERATION="mesa-vdpau"
+      local PACKAGES_HARDWARE_ACCELERATION_MULTILIB="lib32-mesa-vdpau"
+      ;;
+    "nvidia")
+      local PACKAGES_HARDWARE_ACCELERATION="libva-mesa-driver"
+      local PACKAGES_HARDWARE_ACCELERATION_MULTILIB="lib32-libva-mesa-driver"
+      ;;
+    "nvidia-lts")
+      local PACKAGES_HARDWARE_ACCELERATION="libva-mesa-driver"
+      local PACKAGES_HARDWARE_ACCELERATION_MULTILIB="lib32-libva-mesa-driver"
+      ;;
+    "nvidia-dkms")
+      local PACKAGES_HARDWARE_ACCELERATION="libva-mesa-driver"
+      local PACKAGES_HARDWARE_ACCELERATION_MULTILIB="lib32-libva-mesa-driver"
+      ;;
+    "nvidia-470xx-dkms")
+      local PACKAGES_HARDWARE_ACCELERATION="libva-mesa-driver"
+      local PACKAGES_HARDWARE_ACCELERATION_MULTILIB="lib32-libva-mesa-driver"
+      ;;
+    "nvidia-390xx-dkms")
+      local PACKAGES_HARDWARE_ACCELERATION="libva-mesa-driver"
+      local PACKAGES_HARDWARE_ACCELERATION_MULTILIB="lib32-libva-mesa-driver"
+      ;;
+    "nvidia-340xx-dkms")
+      local PACKAGES_HARDWARE_ACCELERATION="libva-mesa-driver"
+      local PACKAGES_HARDWARE_ACCELERATION_MULTILIB="lib32-libva-mesa-driver"
+      ;;
+    "nouveau")
+      local PACKAGES_HARDWARE_ACCELERATION="libva-mesa-driver"
+      local PACKAGES_HARDWARE_ACCELERATION_MULTILIB="lib32-libva-mesa-driver"
+      ;;
+    esac
+  fi
+
+  if [ "$PACKAGES_DRIVER_PACMAN" == "true" ]; then
+    pacman_install "mesa $PACKAGES_DRIVER $PACKAGES_DDX $PACKAGES_VULKAN $PACKAGES_HARDWARE_ACCELERATION"
+  else
+    aur_install "mesa $PACKAGES_DRIVER $PACKAGES_DDX $PACKAGES_VULKAN $PACKAGES_HARDWARE_ACCELERATION"
+  fi
+
+  if [ "$PACKAGES_MULTILIB" == "true" ]; then
+    pacman_install "$PACKAGES_DRIVER_MULTILIB $PACKAGES_VULKAN_MULTILIB $PACKAGES_HARDWARE_ACCELERATION_MULTILIB"
+  fi
+}
+#------------------------------------------------------------------------------------------------------#
+function kernels() {
+  print_step "Kernel"
+
+  pacman_install "linux-headers"
+  if [ -n "$KERNELS" ]; then
+    pacman_install "$KERNELS"
+  fi
+}
+#------------------------------------------------------------------------------------------------------#
+function network() {
+  print_step "Network"
+
+  pacman_install "networkmanager"
+  arch-chroot "${MNT_DIR}" systemctl enable NetworkManager.service
+}
+#------------------------------------------------------------------------------------------------------#
+function virtualbox() {
+  print_step "VirtualBox"
+
+  pacman_install "virtualbox-guest-utils"
+  arch-chroot "${MNT_DIR}" systemctl enable vboxservice.service
+
+  local USER_GROUPS="vboxsf"
+  user_add_groups "$USER_NAME" "$USER_GROUPS"
+
+  for U in "${ADDITIONAL_USERS[@]}"; do
+    local S=()
+    IFS='=' read -ra S <<<"$U"
+    local USER=${S[0]}
+    user_add_groups "$USER" "$USER_GROUPS"
+  done
+}
+
+function vmware() {
+  print_step "VMWare"
+
+  pacman_install "open-vm-tools"
+  arch-chroot "${MNT_DIR}" systemctl enable vmtoolsd.service
+}
+#------------------------------------------------------------------------------------------------------#
+function bootloader() {
+  print_step "Bootloader"
+
+  BOOTLOADER_ALLOW_DISCARDS=""
+
+  if [ "$VIRTUALBOX" != "true" ] && [ "$VMWARE" != "true" ]; then
+    if [ "$CPU_VENDOR" == "intel" ]; then
+      pacman_install "intel-ucode"
+    fi
+    if [ "$CPU_VENDOR" == "amd" ]; then
+      pacman_install "amd-ucode"
+    fi
+  fi
+  if [ "$LVM" == "true" ] || [ -n "$LUKS_PASSWORD" ]; then
+    CMDLINE_LINUX_ROOT="root=$DEVICE_ROOT"
+  else
+    CMDLINE_LINUX_ROOT="root=UUID=$UUID_ROOT"
+  fi
+  if [ -n "$LUKS_PASSWORD" ]; then
+    case "$BOOTLOADER" in
+    "grub" | "refind" | "efistub")
+      if [ "$DEVICE_TRIM" == "true" ]; then
+        BOOTLOADER_ALLOW_DISCARDS=":allow-discards"
+      fi
+      CMDLINE_LINUX="cryptdevice=UUID=$UUID_ROOT:$LUKS_DEVICE_NAME$BOOTLOADER_ALLOW_DISCARDS"
+      ;;
+    "systemd")
+      if [ "$DEVICE_TRIM" == "true" ]; then
+        BOOTLOADER_ALLOW_DISCARDS=" rd.luks.options=discard"
+      fi
+      CMDLINE_LINUX="rd.luks.name=$UUID_ROOT=$LUKS_DEVICE_NAME$BOOTLOADER_ALLOW_DISCARDS"
+      ;;
+    esac
+  fi
+  if [ "$FILE_SYSTEM_TYPE" == "btrfs" ]; then
+    CMDLINE_LINUX="$CMDLINE_LINUX rootflags=subvol=${BTRFS_SUBVOLUME_ROOT[1]}"
+  fi
+  if [ "$KMS" == "true" ]; then
+    case "$DISPLAY_DRIVER" in
+    "nvidia")
+      CMDLINE_LINUX="$CMDLINE_LINUX nvidia-drm.modeset=1"
+      ;;
+    esac
+  fi
+
+  if [ -n "$KERNELS_PARAMETERS" ]; then
+    CMDLINE_LINUX="$CMDLINE_LINUX $KERNELS_PARAMETERS"
+  fi
+
+  CMDLINE_LINUX=$(trim_variable "$CMDLINE_LINUX")
+
+  if [ "$BIOS_TYPE" == "uefi" ] || [ "$SECURE_BOOT" == "true" ]; then
+    pacman_install "efibootmgr"
+  fi
+  if [ "$SECURE_BOOT" == "true" ]; then
+    curl --output PreLoader.efi https://blog.hansenpartnership.com/wp-uploads/2013/PreLoader.efi
+    curl --output HashTool.efi https://blog.hansenpartnership.com/wp-uploads/2013/HashTool.efi
+    md5sum PreLoader.efi >PreLoader.efi.md5
+    md5sum HashTool.efi >HashTool.efi.md5
+    echo "4f7a4f566781869d252a09dc84923a82  PreLoader.efi" | md5sum -c -
+    echo "45639d23aa5f2a394b03a65fc732acf2  HashTool.efi" | md5sum -c -
+  fi
+
+  case "$BOOTLOADER" in
+  "grub")
+    bootloader_grub
+    ;;
+  "refind")
+    bootloader_refind
+    ;;
+  "systemd")
+    bootloader_systemd
+    ;;
+  "efistub")
+    bootloader_efistub
+    ;;
+  esac
+
+  if [ "$UKI" == "true" ]; then
+    if [ "$GPT_AUTOMOUNT" == "true" ]; then
+      echo "$CMDLINE_LINUX rw" >"${MNT_DIR}/etc/kernel/cmdline"
+    else
+      echo "$CMDLINE_LINUX $CMDLINE_LINUX_ROOT rw" >"${MNT_DIR}/etc/kernel/cmdline"
+    fi
+  fi
+
+  arch-chroot "${MNT_DIR}" systemctl set-default multi-user.target
+}
+
+function bootloader_grub() {
+  pacman_install "grub dosfstools"
+  arch-chroot "${MNT_DIR}" sed -i 's/GRUB_DEFAULT=0/GRUB_DEFAULT=saved/' /etc/default/grub
+  arch-chroot "${MNT_DIR}" sed -i 's/#GRUB_SAVEDEFAULT="true"/GRUB_SAVEDEFAULT="true"/' /etc/default/grub
+  arch-chroot "${MNT_DIR}" sed -i -E 's/GRUB_CMDLINE_LINUX_DEFAULT="(.*) quiet"/GRUB_CMDLINE_LINUX_DEFAULT="\1"/' /etc/default/grub
+  arch-chroot "${MNT_DIR}" sed -i 's/GRUB_CMDLINE_LINUX=""/GRUB_CMDLINE_LINUX="'"$CMDLINE_LINUX"'"/' /etc/default/grub
+  {
+    echo ""
+    echo "# alis"
+    echo "GRUB_DISABLE_SUBMENU=y"
+  } >>"${MNT_DIR}"/etc/default/grub
+
+  if [ "$BIOS_TYPE" == "uefi" ]; then
+    arch-chroot "${MNT_DIR}" grub-install --target=x86_64-efi --bootloader-id=grub --efi-directory="${ESP_DIRECTORY}" --recheck
+  fi
+  if [ "$BIOS_TYPE" == "bios" ]; then
+    arch-chroot "${MNT_DIR}" grub-install --target=i386-pc --recheck "$DEVICE"
+  fi
+
+  arch-chroot "${MNT_DIR}" grub-mkconfig -o "${BOOT_DIRECTORY}/grub/grub.cfg"
+
+  if [ "$SECURE_BOOT" == "true" ]; then
+    mv {PreLoader,HashTool}.efi "${MNT_DIR}${ESP_DIRECTORY}/EFI/grub"
+    cp "${MNT_DIR}${ESP_DIRECTORY}/EFI/grub/grubx64.efi" "${MNT_DIR}${ESP_DIRECTORY}/EFI/systemd/loader.efi"
+    arch-chroot "${MNT_DIR}" efibootmgr --unicode --disk "$DEVICE" --part 1 --create --label "Arch Linux (PreLoader)" --loader "/EFI/grub/PreLoader.efi"
+  fi
+
+  if [ "$VIRTUALBOX" == "true" ]; then
+    echo -n "\EFI\grub\grubx64.efi" >"${MNT_DIR}${ESP_DIRECTORY}/startup.nsh"
+  fi
+}
+
+function bootloader_refind() {
+  pacman_install "refind"
+  arch-chroot "${MNT_DIR}" refind-install
+
+  arch-chroot "${MNT_DIR}" rm /boot/refind_linux.conf
+  arch-chroot "${MNT_DIR}" sed -i 's/^timeout.*/timeout 5/' "${ESP_DIRECTORY}/EFI/refind/refind.conf"
+  arch-chroot "${MNT_DIR}" sed -i 's/^#scan_all_linux_kernels.*/scan_all_linux_kernels false/' "${ESP_DIRECTORY}/EFI/refind/refind.conf"
+  #arch-chroot "${MNT_DIR}" sed -i 's/^#default_selection "+,bzImage,vmlinuz"/default_selection "+,bzImage,vmlinuz"/' "${ESP_DIRECTORY}/EFI/refind/refind.conf"
+
+  if [ "$SECURE_BOOT" == "true" ]; then
+    mv {PreLoader,HashTool}.efi "${MNT_DIR}${ESP_DIRECTORY}/EFI/refind"
+    cp "${MNT_DIR}${ESP_DIRECTORY}/EFI/refind/refind_x64.efi" "${MNT_DIR}${ESP_DIRECTORY}/EFI/refind/loader.efi"
+    arch-chroot "${MNT_DIR}" efibootmgr --unicode --disk "$DEVICE" --part 1 --create --label "Arch Linux (PreLoader)" --loader "/EFI/refind/PreLoader.efi"
+  fi
+
+  if [ "$UKI" == "false" ]; then
+    bootloader_refind_entry "linux"
+    if [ -n "$KERNELS" ]; then
+      IFS=' ' read -r -a KS <<<"$KERNELS"
+      for KERNEL in "${KS[@]}"; do
+        if [[ "$KERNEL" =~ ^.*-headers$ ]]; then
+          continue
+        fi
+        bootloader_refind_entry "$KERNEL"
+      done
+    fi
+
+    if [ "$VIRTUALBOX" == "true" ]; then
+      echo -ne "\EFI\refind\refind_x64.efi" >"${MNT_DIR}${ESP_DIRECTORY}/startup.nsh"
+    fi
+  fi
+}
+
+function bootloader_systemd() {
+  arch-chroot "${MNT_DIR}" systemd-machine-id-setup
+  arch-chroot "${MNT_DIR}" bootctl install
+
+  #arch-chroot "${MNT_DIR}" systemctl enable systemd-boot-update.service
+
+  arch-chroot "${MNT_DIR}" mkdir -p "/etc/pacman.d/hooks/"
+  cat <<EOT >"${MNT_DIR}/etc/pacman.d/hooks/systemd-boot.hook"
+[Trigger]
+Type = Package
+Operation = Upgrade
+Target = systemd
+
+[Action]
+Description = Updating systemd-boot...
+When = PostTransaction
+Exec = /usr/bin/systemctl restart systemd-boot-update.service
+EOT
+
+  if [ "$SECURE_BOOT" == "true" ]; then
+    mv {PreLoader,HashTool}.efi "${MNT_DIR}${ESP_DIRECTORY}/EFI/systemd"
+    cp "${MNT_DIR}${ESP_DIRECTORY}/EFI/systemd/systemd-bootx64.efi" "${MNT_DIR}${ESP_DIRECTORY}/EFI/systemd/loader.efi"
+    arch-chroot "${MNT_DIR}" efibootmgr --unicode --disk "$DEVICE" --part 1 --create --label "Arch Linux (PreLoader)" --loader "/EFI/systemd/PreLoader.efi"
+  fi
+
+  if [ "$UKI" == "true" ]; then
+    cat <<EOT >"${MNT_DIR}${ESP_DIRECTORY}/loader/loader.conf"
+# alis
+timeout 5
+editor 0
+EOT
+  else
+    cat <<EOT >"${MNT_DIR}${ESP_DIRECTORY}/loader/loader.conf"
+# alis
+timeout 5
+default archlinux.conf
+editor 0
+EOT
+
+    arch-chroot "${MNT_DIR}" mkdir -p "${ESP_DIRECTORY}/loader/entries/"
+
+    bootloader_systemd_entry "linux"
+    if [ -n "$KERNELS" ]; then
+      IFS=' ' read -r -a KS <<<"$KERNELS"
+      for KERNEL in "${KS[@]}"; do
+        if [[ "$KERNEL" =~ ^.*-headers$ ]]; then
+          continue
+        fi
+        bootloader_systemd_entry "$KERNEL"
+      done
+    fi
+
+    if [ "$VIRTUALBOX" == "true" ]; then
+      echo -n "\EFI\systemd\systemd-bootx64.efi" >"${MNT_DIR}${ESP_DIRECTORY}/startup.nsh"
+    fi
+  fi
+}
+
+function bootloader_efistub() {
+  pacman_install "efibootmgr"
+
+  bootloader_efistub_entry "linux"
+  if [ -n "$KERNELS" ]; then
+    IFS=' ' read -r -a KS <<<"$KERNELS"
+    for KERNEL in "${KS[@]}"; do
+      if [[ "$KERNEL" =~ ^.*-headers$ ]]; then
+        continue
+      fi
+      bootloader_efistub_entry "$KERNEL"
+    done
+  fi
+}
+
+function bootloader_refind_entry() {
+  local KERNEL="$1"
+  local MICROCODE=""
+
+  if [ -n "$INITRD_MICROCODE" ]; then
+    local MICROCODE="initrd=/$INITRD_MICROCODE"
+  fi
+
+  cat <<EOT >>"${MNT_DIR}${ESP_DIRECTORY}/EFI/refind/refind.conf"
+# alis
+menuentry "Arch Linux ($KERNEL)" {
+    volume   $PARTUUID_BOOT
+    loader   /vmlinuz-$KERNEL
+    initrd   /initramfs-$KERNEL.img
+    icon     /EFI/refind/icons/os_arch.png
+    options  "$MICROCODE $CMDLINE_LINUX_ROOT rw $CMDLINE_LINUX"
+    submenuentry "Boot using fallback initramfs"
+        initrd /initramfs-$KERNEL-fallback.img"
+    }
+    submenuentry "Boot to terminal"
+        add_options "systemd.unit=multi-user.target"
+    }
+}
+EOT
+}
+
+function bootloader_systemd_entry() {
+  local KERNEL="$1"
+  local MICROCODE=""
+
+  if [ -n "$INITRD_MICROCODE" ]; then
+    local MICROCODE="initrd /$INITRD_MICROCODE"
+  fi
+
+  cat <<EOT >>"${MNT_DIR}${ESP_DIRECTORY}/loader/entries/arch-$KERNEL.conf"
+title Arch Linux ($KERNEL)
+efi /vmlinuz-linux
+$MICROCODE
+initrd /initramfs-$KERNEL.img
+options initrd=initramfs-$KERNEL.img $CMDLINE_LINUX_ROOT rw $CMDLINE_LINUX
+EOT
+
+  cat <<EOT >>"${MNT_DIR}${ESP_DIRECTORY}/loader/entries/arch-$KERNEL-fallback.conf"
+title Arch Linux ($KERNEL, fallback)
+efi /vmlinuz-linux
+$MICROCODE
+initrd /initramfs-$KERNEL-fallback.img
+options initrd=initramfs-$KERNEL-fallback.img $CMDLINE_LINUX_ROOT rw $CMDLINE_LINUX
+EOT
+}
+
+function bootloader_efistub_entry() {
+  local KERNEL="$1"
+  local MICROCODE=""
+
+  if [ "$UKI" == "true" ]; then
+    arch-chroot "${MNT_DIR}" efibootmgr --unicode --disk "$DEVICE" --part 1 --create --label "Arch Linux ($KERNEL fallback)" --loader "EFI\linux\archlinux-$KERNEL-fallback.efi" --unicode --verbose
+    arch-chroot "${MNT_DIR}" efibootmgr --unicode --disk "$DEVICE" --part 1 --create --label "Arch Linux ($KERNEL)" --loader "EFI\linux\archlinux-$KERNEL.efi" --unicode --verbose
+  else
+    if [ -n "$INITRD_MICROCODE" ]; then
+      local MICROCODE="initrd=\\$INITRD_MICROCODE"
+    fi
+
+    arch-chroot "${MNT_DIR}" efibootmgr --unicode --disk "$DEVICE" --part 1 --create --label "Arch Linux ($KERNEL)" --loader /vmlinuz-"$KERNEL" --unicode "$CMDLINE_LINUX $CMDLINE_LINUX_ROOT rw $MICROCODE initrd=\initramfs-$KERNEL.img" --verbose
+    arch-chroot "${MNT_DIR}" efibootmgr --unicode --disk "$DEVICE" --part 1 --create --label "Arch Linux ($KERNEL fallback)" --loader /vmlinuz-"$KERNEL" --unicode "$CMDLINE_LINUX $CMDLINE_LINUX_ROOT rw $MICROCODE initrd=\initramfs-$KERNEL-fallback.img" --verbose
+  fi
+}
+#------------------------------------------------------------------------------------------------------#
+function mkinitcpio_configuration() {
+  print_step "mkinitcpio Configuration"
+
+  if [ "$KMS" == "true" ]; then
+    local MKINITCPIO_KMS_MODULES=""
+    case "$DISPLAY_DRIVER" in
+    "intel")
+      local MKINITCPIO_KMS_MODULES="i915"
+      ;;
+    "amdgpu")
+      local MKINITCPIO_KMS_MODULES="amdgpu"
+      ;;
+    "ati")
+      local MKINITCPIO_KMS_MODULES="radeon"
+      ;;
+    "nvidia" | "nvidia-lts" | "nvidia-dkms")
+      local MKINITCPIO_KMS_MODULES="nvidia nvidia_modeset nvidia_uvm nvidia_drm"
+      ;;
+    "nouveau")
+      local MKINITCPIO_KMS_MODULES="nouveau"
+      ;;
+    esac
+    local MODULES="$MODULES $MKINITCPIO_KMS_MODULES"
+  fi
+  if [ "$DISPLAY_DRIVER" == "intel" ]; then
+    local OPTIONS=""
+    if [ "$FASTBOOT" == "true" ]; then
+      local OPTIONS="$OPTIONS fastboot=1"
+    fi
+    if [ "$FRAMEBUFFER_COMPRESSION" == "true" ]; then
+      local OPTIONS="$OPTIONS enable_fbc=1"
+    fi
+    if [ -n "$OPTIONS" ]; then
+      echo "options i915 $OPTIONS" >"${MNT_DIR}"/etc/modprobe.d/i915.conf
+    fi
+  fi
+
+  if [ "$LVM" == "true" ]; then
+    HOOKS=${HOOKS//!lvm2/lvm2}
+  fi
+  if [ "$BOOTLOADER" == "systemd" ]; then
+    HOOKS=${HOOKS//!systemd/systemd}
+    HOOKS=${HOOKS//!sd-vconsole/sd-vconsole}
+    if [ -n "$LUKS_PASSWORD" ]; then
+      HOOKS=${HOOKS//!sd-encrypt/sd-encrypt}
+    fi
+  elif [ "$GPT_AUTOMOUNT" == "true" ] && [ -n "$LUKS_PASSWORD" ]; then
+    HOOKS=${HOOKS//!systemd/systemd}
+    HOOKS=${HOOKS//!sd-vconsole/sd-vconsole}
+    HOOKS=${HOOKS//!sd-encrypt/sd-encrypt}
+  else
+    HOOKS=${HOOKS//!udev/udev}
+    HOOKS=${HOOKS//!usr/usr}
+    HOOKS=${HOOKS//!keymap/keymap}
+    HOOKS=${HOOKS//!consolefont/consolefont}
+    if [ -n "$LUKS_PASSWORD" ]; then
+      HOOKS=${HOOKS//!encrypt/encrypt}
+    fi
+  fi
+
+  HOOKS=$(sanitize_variable "$HOOKS")
+  MODULES=$(sanitize_variable "$MODULES")
+  arch-chroot "${MNT_DIR}" sed -i "s/^HOOKS=(.*)$/HOOKS=($HOOKS)/" /etc/mkinitcpio.conf
+  arch-chroot "${MNT_DIR}" sed -i "s/^MODULES=(.*)/MODULES=($MODULES)/" /etc/mkinitcpio.conf
+
+  if [ "$KERNELS_COMPRESSION" != "" ]; then
+    arch-chroot "${MNT_DIR}" sed -i 's/^#COMPRESSION="'"$KERNELS_COMPRESSION"'"/COMPRESSION="'"$KERNELS_COMPRESSION"'"/' /etc/mkinitcpio.conf
+  fi
+
+  if [ "$KERNELS_COMPRESSION" == "bzip2" ]; then
+    pacman_install "bzip2"
+  fi
+  if [ "$KERNELS_COMPRESSION" == "lzma" ] || [ "$KERNELS_COMPRESSION" == "xz" ]; then
+    pacman_install "xz"
+  fi
+  if [ "$KERNELS_COMPRESSION" == "lzop" ]; then
+    pacman_install "lzop"
+  fi
+  if [ "$KERNELS_COMPRESSION" == "lz4" ]; then
+    pacman_install "lz4"
+  fi
+  if [ "$KERNELS_COMPRESSION" == "zstd" ]; then
+    pacman_install "zstd"
+  fi
+
+  if [ "$UKI" == "true" ]; then
+    mkdir -p "${MNT_DIR}${ESP_DIRECTORY}/EFI/linux"
+
+    mkinitcpio_preset "linux"
+    if [ -n "$KERNELS" ]; then
+      IFS=' ' read -r -a KS <<<"$KERNELS"
+      for KERNEL in "${KS[@]}"; do
+        if [[ "$KERNEL" =~ ^.*-headers$ ]]; then
+          continue
+        fi
+        mkinitcpio_preset "$KERNEL"
+      done
+    fi
+  fi
+}
+
+function mkinitcpio_preset() {
+  local KERNEL="$1"
+
+  cat <<EOT >"${MNT_DIR}/etc/mkinitcpio.d/$KERNEL.preset"
+ALL_config="/etc/mkinitcpio.conf"
+ALL_kver="/boot/vmlinuz-$KERNEL"
+ALL_microcode=(/boot/*-ucode.img)
+
+PRESETS=('default' 'fallback')
+
+default_uki="${ESP_DIRECTORY}/EFI/linux/archlinux-$KERNEL.efi"
+
+fallback_uki="${ESP_DIRECTORY}/EFI/linux/archlinux-$KERNEL-fallback.efi"
+fallback_options="-S autodetect"
+EOT
+}
+
+function mkinitcpio() {
+  print_step "mkinitcpio"
+
+  arch-chroot "${MNT_DIR}" mkinitcpio -P
+}
+#------------------------------------------------------------------------------------------------------#
+function custom_shell() {
+  print_step "custom_shell()"
+
+  local CUSTOM_SHELL_PATH=""
+  case "$CUSTOM_SHELL" in
+  "zsh")
+    pacman_install "zsh"
+    local CUSTOM_SHELL_PATH="/usr/bin/zsh"
+    ;;
+  "dash")
+    pacman_install "dash"
+    local CUSTOM_SHELL_PATH="/usr/bin/dash"
+    ;;
+  "fish")
+    pacman_install "fish"
+    local CUSTOM_SHELL_PATH="/usr/bin/fish"
+    ;;
+  esac
+
+  if [ -n "$CUSTOM_SHELL_PATH" ]; then
+    custom_shell_user "root" $CUSTOM_SHELL_PATH
+    custom_shell_user "$USER_NAME" $CUSTOM_SHELL_PATH
+    for U in "${ADDITIONAL_USERS[@]}"; do
+      local S=()
+      IFS='=' read -ra S <<<"$U"
+      local USER=${S[0]}
+      custom_shell_user "$USER" $CUSTOM_SHELL_PATH
+    done
+  fi
+}
+
+function custom_shell_user() {
+  local USER="$1"
+  local CUSTOM_SHELL_PATH="$2"
+
+  if [ "$SYSTEMD_HOMED" == "true" ] && [ "$USER" != "root" ]; then
+    homectl update --shell="$CUSTOM_SHELL_PATH" "$USER"
+  else
+    arch-chroot "${MNT_DIR}" chsh -s "$CUSTOM_SHELL_PATH" "$USER"
+  fi
+}
+#------------------------------------------------------------------------------------------------------#
+
 # END FUNCTIONS
 #------------------------------------------------------------------------------------------------------#
 # MENUS
@@ -957,11 +1978,14 @@ main() {
   loadConfig
   sanitize_variables
   check_variables
-  init
 
   printLogo
 
   until main_menu; do :; done
+
+  local END_TIMESTAMP=$(date -u +"%F %T")
+  local INSTALLATION_TIME=$(date -u -d @$(($(date -d "$END_TIMESTAMP" '+%s') - $(date -d "$START_TIMESTAMP" '+%s'))) '+%T')
+  echo -e "Installation start ${white}$START_TIMESTAMP${nc}, end ${white}$END_TIMESTAMP${nc}, time ${white}$INSTALLATION_TIME${nc}"
 }
 
 main "$@"
