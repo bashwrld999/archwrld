@@ -2170,7 +2170,7 @@ function packages() {
 
 function aur_command_install() {
   pacman_install "git"
-  local COMMAND="$2"
+  local COMMAND="$1"
   execute_aur "rm -rf /home/$USER_NAME/.archwrld && mkdir -p /home/$USER_NAME/.archwrld/aur && cd /home/$USER_NAME/.archwrld/aur && git clone https://aur.archlinux.org/${COMMAND}.git && (cd $COMMAND && makepkg -si --noconfirm) && rm -rf /home/$USER_NAME/.archwrld"
 }
 
