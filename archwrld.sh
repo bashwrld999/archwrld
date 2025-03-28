@@ -99,6 +99,57 @@ select_menu() {
 
 # END MENU FUNCTIONS
 #------------------------------------------------------------------------------------------------------#
+# VARIABLES
+WARNING_CONFIRM="true"
+
+COMMOMS_LOADED="true"
+PARTITION_BOOT=""
+PARTITION_ROOT=""
+PARTITION_BOOT_NUMBER=""
+PARTITION_ROOT_NUMBER=""
+DEVICE_ROOT=""
+DEVICE_LVM=""
+LUKS_DEVICE_NAME="root"
+LVM_VOLUME_GROUP="vg"
+LVM_VOLUME_LOGICAL="root"
+SWAPFILE="/swapfile"
+BOOT_DIRECTORY=""
+ESP_DIRECTORY=""
+UUID_BOOT=""
+UUID_ROOT=""
+PARTUUID_BOOT=""
+PARTUUID_ROOT=""
+CMDLINE_LINUX_ROOT=""
+CMDLINE_LINUX=""
+BTRFS_SUBVOLUME_ROOT=()
+BTRFS_SUBVOLUME_SWAP=()
+USER_NAME_INSTALL="root"
+
+MNT_DIR="/mnt"
+
+AUR_PACKAGE="paru-bin"
+AUR_COMMAND="paru"
+
+BIOS_TYPE=""
+ASCIINEMA=""
+DEVICE_SDA="false"
+DEVICE_NVME="false"
+DEVICE_VDA="false"
+DEVICE_MMC="false"
+CPU_VENDOR=""
+GPU_VENDOR=""
+VIRTUALBOX=""
+VMWARE=""
+SYSTEM_INSTALLATION=""
+INITRD_MICROCODE=""
+
+LOG_TRACE="true"
+LOG_FILE="false"
+USER_NAME="bashwrld"
+USER_PASSWORD="ask"
+PACKAGES_PIPEWIRE="false"
+# END VARIABLES
+#------------------------------------------------------------------------------------------------------#
 # FUNCTIONS
 loadConfig() {
   if [ -e $config_file ]; then
@@ -373,6 +424,11 @@ installArch() {
   if [ -n "$CUSTOM_SHELL" ]; then
     execute_step "custom_shell"
   fi
+  if [ -n "$DESKTOP_ENVIRONMENT" ]; then
+    execute_step "desktop_environment"
+    execute_step "display_manager"
+  fi
+  execute_step "packages"
 }
 #------------------------------------------------------------------------------------------------------#
 warning() {
@@ -1256,18 +1312,6 @@ function user_add_groups() {
     arch-chroot "${MNT_DIR}" usermod -a -G "$USER_GROUPS" "$USER"
   fi
 }
-
-function user_add_groups_lightdm() {
-  arch-chroot "${MNT_DIR}" groupadd -r "autologin"
-  user_add_groups "$USER_NAME" "autologin"
-
-  for U in "${ADDITIONAL_USERS[@]}"; do
-    local S=()
-    IFS='=' read -ra S <<<"$U"
-    local USER=${S[0]}
-    user_add_groups "$USER" "autologin"
-  done
-}
 #------------------------------------------------------------------------------------------------------#
 function display_driver() {
   print_step "display_driver()"
@@ -1928,6 +1972,255 @@ function custom_shell_user() {
   fi
 }
 #------------------------------------------------------------------------------------------------------#
+function desktop_environment() {
+  print_step "desktop_environment()"
+
+  case "$DESKTOP_ENVIRONMENT" in
+  "hyprland")
+    pacman_install "hyprland"
+    ;;
+  "gnome")
+    pacman_install "gnome"
+    ;;
+  "kde")
+    pacman_install "plasma-meta kde-system-meta kde-utilities-meta kde-graphics-meta kde-multimedia-meta kde-network-meta"
+    ;;
+  "xfce")
+    pacman_install "xfce4 xfce4-goodies xorg-server pavucontrol pulseaudio"
+    ;;
+  "mate")
+    pacman_install "mate mate-extra xorg-server"
+    ;;
+  "cinnamon")
+    pacman_install "cinnamon gnome-terminal xorg-server"
+    ;;
+  "lxde")
+    pacman_install "lxde"
+    ;;
+  "i3-wm")
+    pacman_install "i3-wm i3blocks i3lock i3status dmenu rxvt-unicode xorg-server"
+    ;;
+  "i3-gaps")
+    pacman_install "i3-gaps i3blocks i3lock i3status dmenu rxvt-unicode xorg-server"
+    ;;
+  "deepin")
+    pacman_install "deepin deepin-extra deepin-kwin xorg xorg-server"
+    ;;
+  "budgie")
+    pacman_install "budgie-desktop budgie-desktop-view budgie-screensaver gnome-control-center network-manager-applet gnome"
+    ;;
+  "bspwm")
+    pacman_install "bspwm"
+    ;;
+  "awesome")
+    pacman_install "awesome vicious xterm xorg-server"
+    ;;
+  "qtile")
+    pacman_install "qtile xterm xorg-server"
+    ;;
+  "openbox")
+    pacman_install "openbox obconf xterm xorg-server"
+    ;;
+  "leftwm")
+    aur_install "leftwm-git leftwm-theme-git dmenu xterm xorg-server"
+    ;;
+  "dusk")
+    aur_install "dusk-git dmenu xterm xorg-server"
+    ;;
+  esac
+
+  arch-chroot "${MNT_DIR}" systemctl set-default graphical.target
+}
+
+function display_manager() {
+  print_step "display_manager()"
+
+  if [ "$DISPLAY_MANAGER" == "auto" ]; then
+    case "$DESKTOP_ENVIRONMENT" in
+    "gnome" | "budgie")
+      display_manager_gdm
+      ;;
+    "kde")
+      display_manager_sddm
+      ;;
+    "lxde")
+      display_manager_lxdm
+      ;;
+    "hyprland" | "xfce" | "mate" | "cinnamon" | "i3-wm" | "i3-gaps" | "deepin" | "bspwm" | "awesome" | "qtile" | "openbox" | "leftwm" | "dusk")
+      display_manager_lightdm
+      ;;
+    esac
+  else
+    case "$DISPLAY_MANAGER" in
+    "gdm")
+      display_manager_gdm
+      ;;
+    "sddm")
+      display_manager_sddm
+      ;;
+    "lightdm")
+      display_manager_lightdm
+      ;;
+    "lxdm")
+      display_manager_lxdm
+      ;;
+    esac
+  fi
+}
+
+function display_manager_gdm() {
+  pacman_install "gdm"
+  arch-chroot "${MNT_DIR}" systemctl enable gdm.service
+}
+
+function display_manager_sddm() {
+  pacman_install "sddm"
+  arch-chroot "${MNT_DIR}" systemctl enable sddm.service
+}
+
+function display_manager_lightdm() {
+  pacman_install "lightdm lightdm-gtk-greeter"
+  arch-chroot "${MNT_DIR}" systemctl enable lightdm.service
+  user_add_groups_lightdm
+
+  if [ "$DESKTOP_ENVIRONMENT" == "deepin" ]; then
+    arch-chroot "${MNT_DIR}" sed -i 's/^#greeter-session=.*/greeter-session=lightdm-deepin-greeter/' /etc/lightdm/lightdm.conf
+    arch-chroot "${MNT_DIR}" systemctl enable lightdm.service
+  fi
+}
+
+function display_manager_lxdm() {
+  pacman_install "lxdm"
+  arch-chroot "${MNT_DIR}" systemctl enable lxdm.service
+}
+
+function user_add_groups_lightdm() {
+  arch-chroot "${MNT_DIR}" groupadd -r "autologin"
+  user_add_groups "$USER_NAME" "autologin"
+
+  for U in "${ADDITIONAL_USERS[@]}"; do
+    local S=()
+    IFS='=' read -ra S <<<"$U"
+    local USER=${S[0]}
+    user_add_groups "$USER" "autologin"
+  done
+}
+#------------------------------------------------------------------------------------------------------#
+function packages() {
+  print_step "Packages"
+
+  if [ "$PACKAGES_INSTALL" == "true" ]; then
+    aur_command_install
+
+    listPkg="${1:-"./Hosts/Default/packages.lst"}"
+    archPkg=()
+    aurhPkg=()
+    ofs=$IFS
+    IFS='|'
+    while read -r pkg deps; do
+      pkg="${pkg// /}"
+      if [ -z "${pkg}" ]; then
+        continue
+      fi
+
+      if [ ! -z "${deps}" ]; then
+        deps="${deps%"${deps##*[![:space:]]}"}"
+        while read -r cdep; do
+          pass=$(cut -d '#' -f 1 "${listPkg}" | awk -F '|' -v chk="${cdep}" '{if($1 == chk) {print 1;exit}}')
+          if [ -z "${pass}" ]; then
+            if pkg_installed "${cdep}"; then
+              pass=1
+            else
+              break
+            fi
+          fi
+        done < <(echo "${deps}" | xargs -n1)
+
+        if [[ ${pass} -ne 1 ]]; then
+          echo -e "\033[0;33m[skip]\033[0m ${pkg} is missing (${deps}) dependency..."
+          continue
+        fi
+      fi
+
+      if pkg_installed "${pkg}"; then
+        echo -e "\033[0;33m[skip]\033[0m ${pkg} is already installed..."
+      elif pkg_available "${pkg}"; then
+        repo=$(pacman -Si "${pkg}" | awk -F ': ' '/Repository / {print $2}')
+        echo -e "\033[0;32m[${repo}]\033[0m queueing ${pkg} from official arch repo..."
+        archPkg+=("${pkg}")
+      elif aur_available "${pkg}"; then
+        echo -e "\033[0;34m[aur]\033[0m queueing ${pkg} from arch user repo..."
+        aurhPkg+=("${pkg}")
+      else
+        echo "Error: unknown package ${pkg}..."
+      fi
+    done < <(cut -d '#' -f 1 "${listPkg}")
+
+    IFS=${ofs}
+
+    if [[ ${#archPkg[@]} -gt 0 ]]; then
+      pacman_install "${archPkg[@]}"
+    fi
+
+    if [[ ${#aurhPkg[@]} -gt 0 ]]; then
+      "${aurhlpr}" ${use_default} -S "${aurhPkg[@]}"
+    fi
+  fi
+}
+
+function aur_command_install() {
+  pacman_install "git"
+  local COMMAND="$2"
+  execute_aur "rm -rf /home/$USER_NAME/.archwrld && mkdir -p /home/$USER_NAME/.archwrld/aur && cd /home/$USER_NAME/.archwrld/aur && git clone https://aur.archlinux.org/${COMMAND}.git && (cd $COMMAND && makepkg -si --noconfirm) && rm -rf /home/$USER_NAME/.archwrld"
+}
+
+function execute_aur() {
+  local COMMAND="$1"
+  if [ "$SYSTEM_INSTALLATION" == "true" ]; then
+    arch-chroot "${MNT_DIR}" sed -i 's/^%wheel ALL=(ALL:ALL) ALL$/%wheel ALL=(ALL:ALL) NOPASSWD: ALL/' /etc/sudoers
+    arch-chroot "${MNT_DIR}" bash -c "echo -e \"$USER_PASSWORD\n$USER_PASSWORD\n$USER_PASSWORD\n$USER_PASSWORD\n\" | su $USER_NAME -s /usr/bin/bash -c \"$COMMAND\""
+    arch-chroot "${MNT_DIR}" sed -i 's/^%wheel ALL=(ALL:ALL) NOPASSWD: ALL$/%wheel ALL=(ALL:ALL) ALL/' /etc/sudoers
+  else
+    bash -c "$COMMAND"
+  fi
+}
+
+function pkg_installed() {
+  local PkgIn=$1
+
+  local COMMAND="pacman -Qi ${PkgIn}"
+  if arch-chroot "${MNT_DIR}" bash -c "$COMMAND" &>/dev/null; then
+    return 0
+  else
+    return 1
+  fi
+}
+
+pkg_available() {
+  local PkgIn=$1
+
+  if pacman -Si "${PkgIn}" &>/dev/null; then
+    return 0
+  else
+    return 1
+  fi
+}
+
+aur_available() {
+  local PkgIn=$1
+
+  case "$AUR_PACKAGE" in
+  "paru-bin")
+    aurhlpr="paru"
+    ;;
+  esac
+
+  if ${aurhlpr} -Si "${PkgIn}" &>/dev/null; then
+    return 0
+  else
+    return 1
+  fi
+}
 
 # END FUNCTIONS
 #------------------------------------------------------------------------------------------------------#
@@ -1961,7 +2254,7 @@ configure() {
 main() {
   local START_TIMESTAMP=$(date -u +"%F %T")
 
-  clear
+  #clear
 
   config_file="archwrld.conf"
 
@@ -1978,6 +2271,9 @@ main() {
   loadConfig
   sanitize_variables
   check_variables
+
+  packages
+  exit 1
 
   printLogo
 
