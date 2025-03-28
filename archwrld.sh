@@ -2254,7 +2254,7 @@ configure() {
 main() {
   local START_TIMESTAMP=$(date -u +"%F %T")
 
-  #clear
+  clear
 
   config_file="archwrld.conf"
 
@@ -2271,9 +2271,6 @@ main() {
   loadConfig
   sanitize_variables
   check_variables
-
-  packages
-  exit 1
 
   printLogo
 
