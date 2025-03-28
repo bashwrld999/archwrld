@@ -2110,7 +2110,13 @@ function packages() {
   print_step "Packages"
 
   if [ "$PACKAGES_INSTALL" == "true" ]; then
-    aur_command_install
+    case "$AUR_PACKAGE" in
+    "paru-bin")
+      aurhlpr="paru"
+      ;;
+    esac
+
+    aur_command_install "$AUR_PACKAGE"
 
     listPkg="${1:-"./Hosts/Default/packages.lst"}"
     archPkg=()
@@ -2208,12 +2214,6 @@ pkg_available() {
 
 aur_available() {
   local PkgIn=$1
-
-  case "$AUR_PACKAGE" in
-  "paru-bin")
-    aurhlpr="paru"
-    ;;
-  esac
 
   if ${aurhlpr} -Si "${PkgIn}" &>/dev/null; then
     return 0
