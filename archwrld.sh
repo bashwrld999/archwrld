@@ -2111,56 +2111,34 @@ function packages() {
 
   if [ "$PACKAGES_INSTALL" == "true" ]; then
     case "$AUR_PACKAGE" in
-    "paru-bin")
-      aurhlpr="paru"
+    "aurman")
+      AUR_COMMAND="aurman"
+      ;;
+    "yay")
+      AUR_COMMAND="yay"
+      ;;
+    "paru")
+      AUR_COMMAND="paru"
+      ;;
+    "yay-bin")
+      AUR_COMMAND="yay"
+      ;;
+    "paru-bin" | *)
+      AUR_COMMAND="paru"
       ;;
     esac
 
     aur_command_install "$AUR_PACKAGE"
 
-    listPkg="${1:-"./Hosts/Default/packages.lst"}"
+    listPkgDefault="${1:-"./Hosts/Default/packages.lst"}"
+    listPkgHost="${1:-"./Hosts/${HOSTNAME}/packages.lst"}"
     archPkg=()
-    aurhPkg=()
+    aurPkg=()
     ofs=$IFS
     IFS='|'
-    while read -r pkg deps; do
-      pkg="${pkg// /}"
-      if [ -z "${pkg}" ]; then
-        continue
-      fi
 
-      if [ ! -z "${deps}" ]; then
-        deps="${deps%"${deps##*[![:space:]]}"}"
-        while read -r cdep; do
-          pass=$(cut -d '#' -f 1 "${listPkg}" | awk -F '|' -v chk="${cdep}" '{if($1 == chk) {print 1;exit}}')
-          if [ -z "${pass}" ]; then
-            if pkg_installed "${cdep}"; then
-              pass=1
-            else
-              break
-            fi
-          fi
-        done < <(echo "${deps}" | xargs -n1)
-
-        if [[ ${pass} -ne 1 ]]; then
-          echo -e "\033[0;33m[skip]\033[0m ${pkg} is missing (${deps}) dependency..."
-          continue
-        fi
-      fi
-
-      if pkg_installed "${pkg}"; then
-        echo -e "\033[0;33m[skip]\033[0m ${pkg} is already installed..."
-      elif pkg_available "${pkg}"; then
-        repo=$(pacman -Si "${pkg}" | awk -F ': ' '/Repository / {print $2}')
-        echo -e "\033[0;32m[${repo}]\033[0m queueing ${pkg} from official arch repo..."
-        archPkg+=("${pkg}")
-      elif aur_available "${pkg}"; then
-        echo -e "\033[0;34m[aur]\033[0m queueing ${pkg} from arch user repo..."
-        aurhPkg+=("${pkg}")
-      else
-        echo "Error: unknown package ${pkg}..."
-      fi
-    done < <(cut -d '#' -f 1 "${listPkg}")
+    process_package_list "${listPkgDefault}"
+    process_package_list "${listPkgHost}"
 
     IFS=${ofs}
 
@@ -2168,16 +2146,16 @@ function packages() {
       pacman_install "${archPkg[@]}"
     fi
 
-    if [[ ${#aurhPkg[@]} -gt 0 ]]; then
-      "${aurhlpr}" ${use_default} -S "${aurhPkg[@]}"
+    if [[ ${#aurPkg[@]} -gt 0 ]]; then
+      aur_install "${aurPkg[@]}"
     fi
   fi
 }
 
 function aur_command_install() {
   pacman_install "git"
-  local COMMAND="$1"
-  execute_aur "rm -rf /home/$USER_NAME/.archwrld && mkdir -p /home/$USER_NAME/.archwrld/aur && cd /home/$USER_NAME/.archwrld/aur && git clone https://aur.archlinux.org/${COMMAND}.git && (cd $COMMAND && makepkg -si --noconfirm) && rm -rf /home/$USER_NAME/.archwrld"
+  local PACKAGE="$1"
+  execute_aur "rm -rf /home/$USER_NAME/.archwrld && mkdir -p /home/$USER_NAME/.archwrld/aur && cd /home/$USER_NAME/.archwrld/aur && git clone https://aur.archlinux.org/${PACKAGE}.git && (cd $PACKAGE && makepkg -si --noconfirm) && rm -rf /home/$USER_NAME/.archwrld"
 }
 
 function execute_aur() {
@@ -2188,6 +2166,77 @@ function execute_aur() {
     arch-chroot "${MNT_DIR}" sed -i 's/^%wheel ALL=(ALL:ALL) NOPASSWD: ALL$/%wheel ALL=(ALL:ALL) ALL/' /etc/sudoers
   else
     bash -c "$COMMAND"
+  fi
+}
+
+process_package_list() {
+  local listPkg="$1"
+
+  # Loop through the package list
+  while read -r pkg deps; do
+    pkg="${pkg// /}" # Remove spaces from the package name
+    if [ -z "${pkg}" ]; then
+      continue
+    fi
+
+    # Check dependencies
+    if [ ! -z "${deps}" ]; then
+      deps="${deps%"${deps##*[![:space:]]}"}" # Strip trailing spaces from dependencies
+      while read -r cdep; do
+        pass=$(cut -d '#' -f 1 "${listPkg}" | awk -F '|' -v chk="${cdep}" '{if($1 == chk) {print 1;exit}}')
+        if [ -z "${pass}" ]; then
+          if pkg_installed "${cdep}"; then
+            pass=1
+          else
+            break
+          fi
+        fi
+      done < <(echo "${deps}" | xargs -n1)
+
+      # Skip package if dependencies are missing
+      if [[ ${pass} -ne 1 ]]; then
+        echo -e "\033[0;33m[skip]\033[0m ${pkg} is missing (${deps}) dependency..."
+        continue
+      fi
+    fi
+
+    # Check if the package is installed or available
+    if pkg_installed "${pkg}"; then
+      echo -e "\033[0;33m[skip]\033[0m ${pkg} is already installed..."
+    elif pkg_available "${pkg}"; then
+      repo=$(pacman -Si "${pkg}" | awk -F ': ' '/Repository / {print $2}')
+      echo -e "\033[0;32m[${repo}]\033[0m queueing ${pkg} from official arch repo..."
+      archPkg+=("${pkg}")
+    elif aur_available "${pkg}"; then
+      echo -e "\033[0;34m[aur]\033[0m queueing ${pkg} from arch user repo..."
+      aurhPkg+=("${pkg}")
+    else
+      echo "Error: unknown package ${pkg}..."
+    fi
+  done < <(cut -d '#' -f 1 "${listPkg}")
+}
+
+function aur_install() {
+  local ERROR="true"
+  local PACKAGES=()
+  set +e
+  which "$AUR_COMMAND"
+  if [ "$AUR_COMMAND" != "0" ]; then
+    aur_command_install "$USER_NAME" "$AUR_PACKAGE"
+  fi
+  IFS=' ' read -ra PACKAGES <<<"$1"
+  for VARIABLE in {1..5}; do
+    local COMMAND="$AUR_COMMAND -Syu --noconfirm --needed ${PACKAGES[*]}"
+    if execute_aur "$COMMAND"; then
+      local ERROR="false"
+      break
+    else
+      sleep 10
+    fi
+  done
+  set -e
+  if [ "$ERROR" == "true" ]; then
+    return
   fi
 }
 
@@ -2202,7 +2251,7 @@ function pkg_installed() {
   fi
 }
 
-pkg_available() {
+function pkg_available() {
   local PkgIn=$1
 
   if pacman -Si "${PkgIn}" &>/dev/null; then
@@ -2212,7 +2261,7 @@ pkg_available() {
   fi
 }
 
-aur_available() {
+function aur_available() {
   local PkgIn=$1
 
   if ${aurhlpr} -Si "${PkgIn}" &>/dev/null; then
