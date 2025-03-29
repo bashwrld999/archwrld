@@ -14,3 +14,4 @@ else
   curl -sL -o "${ARTIFACT}.zip" "https://github.com/${GITHUB_USER}/archwrld/archive/refs/heads/${BRANCH}.zip"
   bsdtar -x -f "${ARTIFACT}.zip"
 fi
+chmod +x ./${ARTIFACT}/*.sh
