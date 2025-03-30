@@ -97,6 +97,22 @@ select_menu() {
   fi
 }
 
+reload() {
+  sleep 0.2
+  echo -e "${NC}
+
+  --> [${GREEN}Reloading${NC}] "
+}
+
+invalid() {
+  sleep 0.2
+  echo -e "${RED}
+        --------------------------
+        ###  ${YELLOW}Invalid Response  ${RED}###
+        --------------------------"
+  reload
+}
+
 # END MENU FUNCTIONS
 #------------------------------------------------------------------------------------------------------#
 # VARIABLES
@@ -431,7 +447,7 @@ installArch() {
     execute_step "display_manager"
   fi
   execute_step "packages"
-  
+
   local endTimestamp=$(date -u +"%T")
   local installationTime=$(date -u -d @$(($(date -d "$endTimestamp" '+%s') - $(date -d "$startTimestamp" '+%s'))) '+%T')
   echo -e "Installation Start ${WHITE}[$startTimestamp]${NC}\n               End ${WHITE}[$endTimestamp]${NC}\n              Time ${WHITE}[$installationTime]${NC}"
