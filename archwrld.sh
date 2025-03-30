@@ -454,11 +454,11 @@ installArch() {
 }
 #------------------------------------------------------------------------------------------------------#
 warning() {
-  echo -e "${blue}Welcome to ArchWRLD Install Script${nc}"
+  echo -e "${BLUE}Welcome to ArchWRLD Install Script${NC}"
   echo ""
-  echo -e "${red}Warning"'!'"${nc}"
-  echo -e "${red}This script can delete all partitions of the persistent${nc}"
-  echo -e "${red}storage and continuing all your data can be lost.${nc}"
+  echo -e "${RED}Warning"'!'"${NC}"
+  echo -e "${RED}This script can delete all partitions of the persistent${NC}"
+  echo -e "${RED}storage and continuing all your data can be lost.${NC}"
   echo ""
   echo -e "Install device: $DEVICE."
   echo -e "Mount points: ${PARTITION_MOUNT_POINTS[*]}."
