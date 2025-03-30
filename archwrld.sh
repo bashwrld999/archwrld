@@ -4,46 +4,46 @@ set -euo pipefail
 
 #------------------------------------------------------------------------------------------------------#
 # COLORS
-magentabg="\e[1;45m"
-yellowbg="\e[1;43m"
-yellowl="\e[93m"
-greenbg="\e[1;42m"
-magenta="\e[35m"
-yellow="\e[33m"
-bluebg="\e[1;44m"
-cyanbg="\e[1;46m"
-bwhite="\e[0;97m"
-green="\e[32m"
-redbg="\e[1;41m"
-blue="\e[94m"
-cyan="\e[36m"
-red="\e[31m"
-white="\e[0m"
-nc="\e[0m"
+MAGENTABG="\e[1;45m"
+YELLOWBG="\e[1;43m"
+YELLOWL="\e[93m"
+GREENBG="\e[1;42m"
+MAGENTA="\e[35m"
+YELLOW="\e[33m"
+BLUEBG="\e[1;44m"
+CYANBG="\e[1;46m"
+BWHITE="\e[0;97m"
+GREEN="\e[32m"
+REDBG="\e[1;41m"
+BLUE="\e[94m"
+CYAN="\e[36m"
+RED="\e[31m"
+WHITE="\e[0m"
+NC="\e[0m"
 # END COLORS
 #------------------------------------------------------------------------------------------------------#
 # MENU FUNCTIONS
 printLogo() {
-  echo -e "${blue}
+  echo -e "${BLUE}
                     -@
                    .##@
                   .####@
                   @#####@
-                . *######@            ${white}                     _ __          _______  _      _____  ${blue}
-               .##@o@#####@           ${white}      /\            | |\ \        / /  __ \| |    |  __ \ ${blue}
-              /############@          ${white}     /  \   _ __ ___| |_\ \  /\  / /| |__) | |    | |  | |${blue}
-             /##############@         ${white}    / /\ \ | '__/ __| '_ \ \/  \/ / |  _  /| |    | |  | |${blue}
-            @######@**%######@        ${white}   / ____ \| | | (__| | | \  /\  /  | | \ \| |____| |__| |${blue}
-           @######\`     %#####o       ${white}  /_/    \_\_|  \___|_| |_|\/  \/   |_|  \_\______|_____/ ${blue}
+                . *######@            ${WHITE}                     _ __          _______  _      _____  ${BLUE}
+               .##@o@#####@           ${WHITE}      /\            | |\ \        / /  __ \| |    |  __ \ ${BLUE}
+              /############@          ${WHITE}     /  \   _ __ ___| |_\ \  /\  / /| |__) | |    | |  | |${BLUE}
+             /##############@         ${WHITE}    / /\ \ | '__/ __| '_ \ \/  \/ / |  _  /| |    | |  | |${BLUE}
+            @######@**%######@        ${WHITE}   / ____ \| | | (__| | | \  /\  /  | | \ \| |____| |__| |${BLUE}
+           @######\`     %#####o       ${WHITE}  /_/    \_\_|  \___|_| |_|\/  \/   |_|  \_\______|_____/ ${BLUE}
           @######@       ######%
         -@#######h       ######@.\`
        /#####h**\`\`       \`**%@####@
       @H@*\`                    \`*%#@
-     *\`                            \`* ${white}\n\n"
+     *\`                            \`* ${WHITE}\n\n"
 }
 
 title() {
-  echo -e "\n\n${magenta}###${nc}----------------------------------------${magenta}[ ${bwhite}$1${nc} ${magenta}]${nc}----------------------------------------${magenta}###\n"
+  echo -e "\n\n${MAGENTA}###${NC}----------------------------------------${MAGENTA}[ ${BWHITE}$1${NC} ${MAGENTA}]${NC}----------------------------------------${MAGENTA}###\n"
 }
 
 select_menu() {
@@ -64,13 +64,13 @@ select_menu() {
   title "$title"
 
   # Display the options to the user
-  echo -e "${yellow}  >  Make a selection:${nc}\n"
+  echo -e "${YELLOW}  >  Make a selection:${NC}\n"
   for i in "${!options[@]}"; do
     echo -e "     [$((i + 1))]  ${options[$i]}"
   done
 
   # Prompt the user to enter their choice
-  echo -e "\n${blue}  Enter a number: ${nc}\n"
+  echo -e "\n${BLUE}  Enter a number: ${NC}\n"
   read -r -p "  ==> " choice
   echo -e ""
 
@@ -163,7 +163,7 @@ loadConfig() {
 function print_step() {
   STEP="$1"
   echo ""
-  echo -e "${blue}#---> ${STEP} ${nc}"
+  echo -e "${BLUE}#---> ${STEP} ${NC}"
 }
 
 function execute_step() {
@@ -2136,8 +2136,8 @@ function packages() {
 
     aur_command_install "$AUR_PACKAGE"
 
-    listPkgDefault="${1:-"./Hosts/Default/packages.lst"}"
-    listPkgHost="${1:-"./Hosts/${HOSTNAME}/packages.lst"}"
+    listPkgDefault="${1:-"./Install/Hosts/Default/packages.lst"}"
+    listPkgHost="${1:-"./Install/Hosts/${HOSTNAME}/packages.lst"}"
     archPkg=()
     aurPkg=()
     ofs=$IFS
