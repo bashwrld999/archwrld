@@ -10,6 +10,6 @@ curl -sL -o "${ARTIFACT}.zip" "https://github.com/${GITHUB_USER}/archwrld/archiv
 bsdtar -x -f "${ARTIFACT}.zip"
 cp -R "${ARTIFACT}"/* ./
 
-chmod +x ./*.sh
+rm -rf "${ARTIFACT}.zip"
 
-./archwrld.sh
+chmod +x ./*.sh

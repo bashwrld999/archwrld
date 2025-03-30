@@ -2299,8 +2299,8 @@ function end_install() {
   echo -e "${GREEN}Arch Linux installed successfully"'!'"${NC}"
   echo ""
 
-  mkdir -p "${MNT_DIR}"/.archwrld
-  cp -r ./* "${MNT_DIR}"/.archwrld
+  mkdir -p "${MNT_DIR}"/home/${USER_NAME}/.archwrld
+  cp -r ./* "${MNT_DIR}"/home/${USER_NAME}/.archwrld
 }
 
 # END FUNCTIONS
