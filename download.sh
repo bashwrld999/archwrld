@@ -11,4 +11,5 @@ bsdtar -x -f "${ARTIFACT}.zip"
 
 chmod +x ./${ARTIFACT}/*.sh
 
-./${ARTIFACT}/archwrld.sh
+cd ./${ARTIFACT}
+./archwrld.sh
