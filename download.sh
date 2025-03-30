@@ -8,8 +8,8 @@ ARTIFACT="archwrld-${BRANCH}"
 
 curl -sL -o "${ARTIFACT}.zip" "https://github.com/${GITHUB_USER}/archwrld/archive/refs/heads/${BRANCH}.zip"
 bsdtar -x -f "${ARTIFACT}.zip"
+cp -R "${ARTIFACT}"/* ./
 
-chmod +x ./${ARTIFACT}/*.sh
+chmod +x ./*.sh
 
-cd ./${ARTIFACT}
 ./archwrld.sh

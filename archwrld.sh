@@ -23,7 +23,7 @@ NC="\e[0m"
 # END COLORS
 #------------------------------------------------------------------------------------------------------#
 # MENU FUNCTIONS
-printLogo() {
+print_logo() {
   echo -e "${BLUE}
                     -@
                    .##@
@@ -167,7 +167,7 @@ PACKAGES_PIPEWIRE="false"
 # END VARIABLES
 #------------------------------------------------------------------------------------------------------#
 # FUNCTIONS
-loadConfig() {
+load_config() {
   if [ -e $CONFIG_FILE ]; then
     source $CONFIG_FILE
   else
@@ -447,6 +447,7 @@ installArch() {
     execute_step "display_manager"
   fi
   execute_step "packages"
+  execute_step "end_install"
 
   local endTimestamp=$(date -u +"%T")
   local installationTime=$(date -u -d @$(($(date -d "$endTimestamp" '+%s') - $(date -d "$startTimestamp" '+%s'))) '+%T')
@@ -2292,6 +2293,15 @@ function aur_available() {
     return 1
   fi
 }
+#------------------------------------------------------------------------------------------------------#
+function end_install() {
+  echo ""
+  echo -e "${GREEN}Arch Linux installed successfully"'!'"${NC}"
+  echo ""
+
+  mkdir -p "${MNT_DIR}"/.archwrld
+  cp -r ./* "${MNT_DIR}"/.archwrld
+}
 
 # END FUNCTIONS
 #------------------------------------------------------------------------------------------------------#
@@ -2337,11 +2347,11 @@ main() {
     esac
   done
 
-  loadConfig
+  load_config
   sanitize_variables
   check_variables
 
-  printLogo
+  print_logo
 
   until main_menu; do :; done
 }
