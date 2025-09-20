@@ -1,0 +1,6 @@
+#!/bin/bash
+
+echo -e "\e[32mUpdate ArchWRLD\e[0m"
+
+git -C $ARCHWRLD_PATH pull --autostash
+git -C $ARCHWRLD_PATH diff --check || git -C $ARCHWRLD_PATH reset --merge

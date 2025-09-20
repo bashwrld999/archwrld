@@ -1,0 +1,10 @@
+#!/bin/bash
+
+sudo cp ~/.local/share/archwrld/default/plymouth/* /usr/share/plymouth/themes/archwrld/
+sudo plymouth-set-default-theme archwrld
+
+if command -v limine-mkinitcpio &>/dev/null; then
+  sudo limine-mkinitcpio
+else
+  sudo mkinitcpio -P
+fi

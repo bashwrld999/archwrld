@@ -1,4 +1,4 @@
-@import "../omarchy/current/theme/waybar.css";
+@import "../archwrld/current/theme/waybar.css";
 
 * {
   background-color: @background;
@@ -36,7 +36,7 @@
 #network,
 #bluetooth,
 #pulseaudio,
-#custom-omarchy,
+#custom-archwrld,
 #custom-screenrecording-indicator,
 #custom-update {
   min-width: 12px;

@@ -1,4 +1,4 @@
-omarchy-refresh-applications
+archwrld-refresh-applications
 update-desktop-database ~/.local/share/applications
 
 # Open all images with imv

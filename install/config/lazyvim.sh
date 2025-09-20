@@ -1,1 +1,1 @@
-omarchy-lazyvim-setup
+archwrld-lazyvim-setup

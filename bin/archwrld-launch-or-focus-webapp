@@ -1,0 +1,8 @@
+#!/bin/bash
+
+if (($# == 0)); then
+  echo "Usage: archwrld-launch-or-focus-webapp [window-pattern] [url]"
+  exit 1
+fi
+
+exec archwrld-launch-or-focus "$1" "archwrld-launch-webapp '$2'"

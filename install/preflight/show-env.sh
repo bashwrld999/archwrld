@@ -1,6 +1,6 @@
 # Show installation environment variables
 gum log --level info "Installation Environment:"
 
-env | grep -E "^(OMARCHY_CHROOT_INSTALL|OMARCHY_ONLINE_INSTALL|OMARCHY_USER_NAME|OMARCHY_USER_EMAIL|USER|HOME|OMARCHY_REPO|OMARCHY_REF|OMARCHY_PATH)=" | sort | while IFS= read -r var; do
+env | grep -E "^(ARCHWRLD_CHROOT_INSTALL|ARCHWRLD_ONLINE_INSTALL|ARCHWRLD_USER_NAME|ARCHWRLD_USER_EMAIL|USER|HOME|ARCHWRLD_REPO|ARCHWRLD_REF|ARCHWRLD_PATH)=" | sort | while IFS= read -r var; do
   gum log --level info "  $var"
 done

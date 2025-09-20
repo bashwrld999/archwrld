@@ -1,0 +1,21 @@
+#!/bin/bash
+
+if [ "$(uname -r | sed 's/-arch/\.arch/')" != "$(pacman -Q linux | awk '{print $2}')" ]; then
+  gum confirm "Linux kernel has been updated. Reboot?" && archwrld-state clear re*-required && sudo reboot now
+
+elif [ -f "$HOME/.local/state/archwrld/reboot-required" ]; then
+  gum confirm "Updates require reboot. Ready?" && archwrld-state clear re*-required && sudo reboot now
+
+elif [ -f "$HOME/.local/state/archwrld/relaunch-required" ]; then
+  gum confirm "Updates require Hyprland relaunch. Ready?" && archwrld-state clear re*-required && uwsm stop
+fi
+
+for file in "$HOME"/.local/state/archwrld/restart-*-required; do
+  if [ -f "$file" ]; then
+    filename=$(basename "$file")
+    service=$(echo "$filename" | sed 's/restart-\(.*\)-required/\1/')
+    echo "Restarting $service"
+    archwrld-state clear "$filename"
+    archwrld-restart-"$service"
+  fi
+done

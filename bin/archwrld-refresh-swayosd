@@ -1,0 +1,5 @@
+#!/bin/bash
+
+archwrld-refresh-config swayosd/config.toml
+archwrld-refresh-config swayosd/style.css
+archwrld-restart-swayosd

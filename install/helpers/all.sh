@@ -1,4 +1,4 @@
-source $OMARCHY_INSTALL/helpers/chroot.sh
-source $OMARCHY_INSTALL/helpers/presentation.sh
-source $OMARCHY_INSTALL/helpers/errors.sh
-source $OMARCHY_INSTALL/helpers/logging.sh
+source $ARCHWRLD_INSTALL/helpers/chroot.sh
+source $ARCHWRLD_INSTALL/helpers/presentation.sh
+source $ARCHWRLD_INSTALL/helpers/errors.sh
+source $ARCHWRLD_INSTALL/helpers/logging.sh

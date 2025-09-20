@@ -1,3 +1,3 @@
 echo "Install satty for the new screenshot flow"
 
-omarchy-pkg-add satty
+archwrld-pkg-add satty

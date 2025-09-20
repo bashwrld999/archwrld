@@ -1,3 +1,3 @@
-echo "Use new Omarchy mirror as default"
+echo "Use new ArchWRLD mirror as default"
 
-omarchy-refresh-pacman-mirrorlist
+archwrld-refresh-pacman-mirrorlist

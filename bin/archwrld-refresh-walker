@@ -1,0 +1,4 @@
+#!/bin/bash
+
+archwrld-refresh-config walker/config.toml
+archwrld-restart-walker

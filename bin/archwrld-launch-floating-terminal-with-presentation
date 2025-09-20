@@ -1,0 +1,4 @@
+#!/bin/bash
+
+cmd="$*"
+exec setsid uwsm app -- alacritty --class=ArchWRLD --title=ArchWRLD -e bash -c "archwrld-show-logo; $cmd; archwrld-show-done"

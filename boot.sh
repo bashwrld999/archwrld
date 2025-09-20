@@ -1,39 +1,35 @@
 #!/bin/bash
 
 # Set install mode to online since boot.sh is used for curl installations
-export OMARCHY_ONLINE_INSTALL=true
+export ARCHWRLD_ONLINE_INSTALL=true
 
-ansi_art='                 ▄▄▄                                                   
- ▄█████▄    ▄███████████▄    ▄███████   ▄███████   ▄███████   ▄█   █▄    ▄█   █▄ 
-███   ███  ███   ███   ███  ███   ███  ███   ███  ███   ███  ███   ███  ███   ███
-███   ███  ███   ███   ███  ███   ███  ███   ███  ███   █▀   ███   ███  ███   ███
-███   ███  ███   ███   ███ ▄███▄▄▄███ ▄███▄▄▄██▀  ███       ▄███▄▄▄███▄ ███▄▄▄███
-███   ███  ███   ███   ███ ▀███▀▀▀███ ▀███▀▀▀▀    ███      ▀▀███▀▀▀███  ▀▀▀▀▀▀███
-███   ███  ███   ███   ███  ███   ███ ██████████  ███   █▄   ███   ███  ▄██   ███
-███   ███  ███   ███   ███  ███   ███  ███   ███  ███   ███  ███   ███  ███   ███
- ▀█████▀    ▀█   ███   █▀   ███   █▀   ███   ███  ███████▀   ███   █▀    ▀█████▀ 
-                                       ███   █▀                                  '
+ansi_art='
+    _    ____   ____ _   ___        ______  _     ____  
+   / \  |  _ \ / ___| | | \ \      / /  _ \| |   |  _ \ 
+  / _ \ | |_) | |   | |_| |\ \ /\ / /| |_) | |   | | | |
+ / ___ \|  _ <| |___|  _  | \ V  V / |  _ <| |___| |_| |
+/_/   \_\_| \_\\____|_| |_|  \_/\_/  |_| \_\_____|____/ '
 
 clear
 echo -e "\n$ansi_art\n"
 
 sudo pacman -Syu --noconfirm --needed git
 
-# Use custom repo if specified, otherwise default to basecamp/omarchy
-OMARCHY_REPO="${OMARCHY_REPO:-basecamp/omarchy}"
+# Use custom repo if specified, otherwise default to bashwrld999/archwrld
+ARCHWRLD_REPO="${ARCHWRLD_REPO:-bashwrld999/archwrld}"
 
-echo -e "\nCloning Omarchy from: https://github.com/${OMARCHY_REPO}.git"
-rm -rf ~/.local/share/omarchy/
-git clone "https://github.com/${OMARCHY_REPO}.git" ~/.local/share/omarchy >/dev/null
+echo -e "\nCloning ArchWRLD from: https://github.com/${ARCHWRLD_REPO}.git"
+rm -rf ~/.local/share/archwrld/
+git clone "https://github.com/${ARCHWRLD_REPO}.git" ~/.local/share/archwrld >/dev/null
 
 # Use custom branch if instructed, otherwise default to master
-OMARCHY_REF="${OMARCHY_REF:-master}"
-if [[ $OMARCHY_REF != "master" ]]; then
-  echo -e "\e[32mUsing branch: $OMARCHY_REF\e[0m"
-  cd ~/.local/share/omarchy
-  git fetch origin "${OMARCHY_REF}" && git checkout "${OMARCHY_REF}"
+ARCHWRLD_REF="${ARCHWRLD_REF:-master}"
+if [[ $ARCHWRLD_REF != "master" ]]; then
+  echo -e "\e[32mUsing branch: $ARCHWRLD_REF\e[0m"
+  cd ~/.local/share/archwrld
+  git fetch origin "${ARCHWRLD_REF}" && git checkout "${ARCHWRLD_REF}"
   cd -
 fi
 
 echo -e "\nInstallation starting..."
-source ~/.local/share/omarchy/install.sh
+source ~/.local/share/archwrld/install.sh

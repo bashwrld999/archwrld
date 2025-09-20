@@ -1,0 +1,4 @@
+#!/bin/bash
+
+archwrld-refresh-config hypr/hypridle.conf
+archwrld-restart-hypridle

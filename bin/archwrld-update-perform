@@ -1,0 +1,8 @@
+#!/bin/bash
+
+set -e
+
+archwrld-update-available-reset
+archwrld-update-system-pkgs
+archwrld-migrate
+archwrld-update-restart

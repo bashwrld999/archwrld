@@ -1,0 +1,5 @@
+#!/bin/bash
+
+archwrld-refresh-config waybar/config.jsonc
+archwrld-refresh-config waybar/style.css
+archwrld-restart-waybar
