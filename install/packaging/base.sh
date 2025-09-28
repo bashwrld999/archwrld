@@ -74,9 +74,9 @@ while read -r pkg deps; do
 done < <(cut -d '#' -f 1 "${listPkg}")
 
 if [[ ${#archPkg[@]} -gt 0 ]]; then
-    sudo pacman ${use_default} -S "${archPkg[@]}"
+    sudo pacman ${use_default} -S --noconfirm --needed "${archPkg[@]}"
 fi
 
 if [[ ${#aurhPkg[@]} -gt 0 ]]; then
-    yay ${use_default} -S "${aurhPkg[@]}"
+    yay ${use_default} -S --noconfirm --needed "${aurhPkg[@]}"
 fi
