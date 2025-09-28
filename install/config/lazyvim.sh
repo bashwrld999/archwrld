@@ -1,1 +1,0 @@
-archwrld-lazyvim-setup
