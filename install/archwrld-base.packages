@@ -76,8 +76,6 @@ nss-mdns
 nvim
 obs-studio
 obsidian
-omarchy-chromium
-omarchy-lazyvim
 pamixer
 pinta
 playerctl
@@ -128,4 +126,5 @@ xmlstarlet
 xournalpp
 yaru-icon-theme
 yay
+zen-browser-bin
 zoxide
