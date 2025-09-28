@@ -30,7 +30,7 @@ aur_available() {
     fi
 }
 
-listPkg="${1:-"$OMARCHY_INSTALL/archwrld-base.packages"}"
+listPkg="${1:-"$ARCHWRLD_INSTALL/archwrld-base.packages"}"
 archPkg=()
 aurhPkg=()
 
