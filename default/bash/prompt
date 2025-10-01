@@ -1,7 +1,9 @@
-# Technicolor dreams
-force_color_prompt=yes
-color_prompt=yes
+# === Prompt: Technicolor dreams ===
 
-# Simple prompt with path in the window/pane title and caret for typing line
-PS1=$'\uf0a9 '
-PS1="\[\e]0;\w\a\]$PS1"
+# Show current path in terminal or tmux window title
+precmd() {
+  print -Pn "\e]0;%~\a"
+}
+
+# Set prompt symbol (➩ = U+F0A9, from Nerd Font or Powerline)
+PROMPT=$'\uf0a9 '

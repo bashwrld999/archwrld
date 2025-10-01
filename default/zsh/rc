@@ -1,0 +1,13 @@
+# === Source configuration files ===
+source ~/.local/share/archwrld/default/zsh/shell
+source ~/.local/share/archwrld/default/zsh/aliases
+source ~/.local/share/archwrld/default/zsh/functions
+source ~/.local/share/archwrld/default/zsh/prompt
+source ~/.local/share/archwrld/default/zsh/init
+source ~/.local/share/archwrld/default/zsh/envs
+
+# === Load key bindings only in interactive shells ===
+if [[ -o interactive ]]; then
+  bindkey -v                    #  enable vi mode
+  bindkey -f ~/.local/share/archwrld/default/zsh/inputrc 2>/dev/null
+fi

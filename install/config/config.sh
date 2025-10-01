@@ -4,3 +4,6 @@ cp -R ~/.local/share/archwrld/config/* ~/.config/
 
 # Use default bashrc from ArchWRLD
 cp ~/.local/share/archwrld/default/bashrc ~/.bashrc
+
+# Use default zshrc from ArchWRLD
+cp ~/.local/share/archwrld/default/zshrc ~/.zshrc

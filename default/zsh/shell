@@ -1,0 +1,18 @@
+# === History Control ===
+setopt APPEND_HISTORY
+setopt HIST_IGNORE_ALL_DUPS      # Avoid duplicates
+setopt HIST_REDUCE_BLANKS        # Remove superfluous blanks
+setopt HIST_IGNORE_SPACE         # Commands starting with space are not saved
+HISTSIZE=32768
+SAVEHIST=$HISTSIZE
+HISTFILE=~/.zsh_history          # Default history file
+
+# === Autocompletion ===
+autoload -Uz compinit
+compinit
+
+# === Set complete path ===
+export PATH="$HOME/.local/bin:$PATH"
+
+# === disable hashall ===
+setopt NO_HASH_CMDS

@@ -1,0 +1,53 @@
+# === Zsh Completion & Line Editing Setup ===
+
+# Enable completion system
+autoload -Uz compinit
+compinit
+
+# === Completion Behavior ===
+# Ignore case when completing
+zstyle ':completion:*' matcher-list 'm:{a-zA-Z}={A-Za-z}'
+
+# Show all matches immediately when ambiguous
+zstyle ':completion:*' menu select
+zstyle ':completion:*' select-prompt %SScrolling active: current selection at %p%s
+
+# Display extra info like `ls -F`
+zstyle ':completion:*' list-colors ${(s.:.)LS_COLORS}
+
+# Autocomplete hidden files only if dot is typed
+zstyle ':completion:*' file-patterns '.*(-/)' '*(-/)'
+
+# Show all matches at once, no paging
+setopt NO_LIST_BEEP
+setopt ALWAYS_TO_END
+
+# Ask before showing large number of completions
+zstyle ':completion:*' max-errors 1
+zstyle ':completion:*' completer _complete
+zstyle ':completion:*' group-name ''
+zstyle ':completion:*' verbose true
+zstyle ':completion:*' list-prompt 'At %p:'
+
+# Completion prefix display length equivalent (no exact equivalent)
+# Skip this unless you want to dig deep into custom widgets
+
+# === Symlinked directories get trailing slash ===
+zstyle ':completion:*' mark-directories true
+
+# Colored completion listings (like ls -F)
+zstyle ':completion:*' list-colors ${(s.:.)LS_COLORS}
+
+# === Key Bindings (like .inputrc arrow key history search) ===
+autoload -Uz up-line-or-beginning-search down-line-or-beginning-search
+
+bindkey '^[[A' up-line-or-beginning-search    # Up arrow
+bindkey '^[[B' down-line-or-beginning-search  # Down arrow
+bindkey '^[[C' forward-char                   # Right arrow
+bindkey '^[[D' backward-char                  # Left arrow
+
+# === Meta/input/output behavior ===
+# Zsh supports multibyte and UTF-8 by default in modern systems
+# These readline-style "meta" flags are generally not needed in Zsh
+setopt AUTO_PARAM_SLASH       # Add slash after directories
+setopt COMPLETE_IN_WORD       # Like skip-completed-text

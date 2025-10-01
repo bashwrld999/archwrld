@@ -1,0 +1,6 @@
+# === Editor Settings ===
+export EDITOR="nvim"             # or your preferred editor
+export SUDO_EDITOR="$EDITOR"
+
+# === bat Theme ===
+export BAT_THEME="ansi"

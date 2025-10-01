@@ -8,8 +8,8 @@ for f in ~/.local/share/archwrld/themes/*; do ln -nfs "$f" ~/.config/archwrld/th
 
 # Set initial theme
 mkdir -p ~/.config/archwrld/current
-ln -snf ~/.config/archwrld/themes/tokyo-night ~/.config/archwrld/current/theme
-ln -snf ~/.config/archwrld/current/theme/backgrounds/1-scenery-pink-lakeside-sunset-lake-landscape-scenic-panorama-7680x3215-144.png ~/.config/archwrld/current/background
+ln -snf ~/.config/archwrld/themes/horizon ~/.config/archwrld/current/theme
+ln -snf ~/.config/archwrld/current/theme/backgrounds/1-rose-pine.png ~/.config/archwrld/current/background
 
 # Set specific app links for current theme
 ln -snf ~/.config/archwrld/current/theme/neovim.lua ~/.config/nvim/lua/plugins/theme.lua
