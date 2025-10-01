@@ -1,2 +1,2 @@
 # Setting zsh as default
-chsh -s /usr/bin/zsh
+sed -i 's|/bin/bash|/usr/bin/zsh|' /etc/passwd
