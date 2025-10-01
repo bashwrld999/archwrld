@@ -64,14 +64,14 @@ hash_mismatch_panic: no
 term_background: 1a1b26
 backdrop: 1a1b26
 
-# Terminal colors (Tokyo Night palette)
-term_palette: 15161e;f7768e;9ece6a;e0af68;7aa2f7;bb9af7;7dcfff;a9b1d6
-term_palette_bright: 414868;f7768e;9ece6a;e0af68;7aa2f7;bb9af7;7dcfff;c0caf5
+# Terminal colors (Horizon palette)
+term_palette: 15161e;f7768e;e95678;e0af68;7aa2f7;bb9af7;7dcfff;a9b1d6
+term_palette_bright: 414868;f7768e;e95678;e0af68;7aa2f7;bb9af7;7dcfff;c0caf5
 
 # Text colors
-term_foreground: c0caf5
-term_foreground_bright: c0caf5
-term_background_bright: 24283b
+term_foreground: 848DB3
+term_foreground_bright: 848DB3
+term_background_bright: 1C1E26
  
 EOF
 
